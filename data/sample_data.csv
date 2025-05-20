@@ -1,0 +1,21 @@
+date,category,type,description,amount,employee,component,inventory_level
+2024-06-01,Revenue,Sale,Product A Sale,15000,,,
+2024-06-02,Expense,Salary,Monthly Salary,-5000,John Doe,,
+2024-06-03,Expense,Raw Material,Purchase Steel,-3000,,Steel,1000
+2024-06-04,Expense,Raw Material,Purchase Plastic,-1200,,Plastic,500
+2024-06-05,Expense,Utility,Electricity Bill,-800,,,
+2024-06-06,Expense,Maintenance,Machine Repair,-600,,,
+2024-06-07,Revenue,Sale,Product B Sale,12000,,,
+2024-06-08,Expense,Salary,Monthly Salary,-5200,Jane Smith,,
+2024-06-09,Expense,Inventory,Inventory Adjustment,-400,,Screws,2000
+2024-06-10,Expense,Logistics,Shipping Costs,-700,,,
+2024-06-11,Revenue,Sale,Product C Sale,9000,,,
+2024-06-12,Expense,Salary,Monthly Salary,-4800,Alex Lee,,
+2024-06-13,Expense,Raw Material,Purchase Aluminum,-2500,,Aluminum,800
+2024-06-14,Expense,Utility,Water Bill,-300,,,
+2024-06-15,Expense,Other,Office Supplies,-350,,,
+2024-06-16,Revenue,Sale,Product A Sale,16000,,,
+2024-06-17,Expense,Salary,Monthly Salary,-5100,Emily Clark,,
+2024-06-18,Expense,Inventory,Inventory Adjustment,-200,,Bolts,1500
+2024-06-19,Expense,Maintenance,Machine Calibration,-450,,,
+2024-06-20,Revenue,Sale,Product B Sale,13000,,,
