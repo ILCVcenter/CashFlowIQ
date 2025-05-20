@@ -52,7 +52,6 @@ with expenses_tab:
 
 with contract_tab:
     st.subheader("Contract Analysis (PDF)")
-    openai_api_key = st.text_input("Enter your OpenAI API Key", type="password")
     model = st.selectbox("בחר מודל GPT", ["gpt-3.5-turbo", "gpt-4"], index=1)
     
     # משפר את הטיפול בשגיאות העלאת קובצים
@@ -64,17 +63,15 @@ with contract_tab:
                     text = services.extract_text_from_pdf(uploaded_file)
                     if text.strip():
                         st.text_area("Contract Text", text, height=200)
-                        if st.button("Analyze Contract with GPT") and openai_api_key:
+                        if st.button("Analyze Contract with GPT"):
                             with st.spinner("Analyzing contract with GPT..."):
                                 try:
-                                    result = services.analyze_contract(text, openai_api_key, model)
+                                    result = services.analyze_contract(text, None, model)
                                     st.success("Contract Analysis Result:")
                                     st.json(result)
                                 except Exception as e:
                                     st.error(f"Error analyzing contract: {str(e)}")
-                                    st.info("Try again with a different API key or check your network connection.")
-                        elif not openai_api_key:
-                            st.info("Please enter your OpenAI API Key to analyze the contract.")
+                                    st.info("Try again or check your network connection.")
                     else:
                         st.warning("Could not extract text from the PDF. The file might be scanned or password-protected.")
                 except Exception as e:

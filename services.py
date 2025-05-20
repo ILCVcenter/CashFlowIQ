@@ -3,6 +3,8 @@ import PyPDF2
 import openai
 import os
 import json
+import re
+from dotenv import load_dotenv
 
 # חילוץ טקסט מ-PDF
 
@@ -15,12 +17,27 @@ def extract_text_from_pdf(pdf_file):
 
 # ניתוח חוזה עם GPT
 
+def extract_json_from_text(text):
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        return match.group(0)
+    return None
+
+def get_openai_key_from_file():
+    try:
+        with open("Key", "r") as f:
+            return f.read().strip()
+    except Exception:
+        return None
+
 def analyze_contract(text, openai_api_key=None, model="gpt-4"):
+    if not openai_api_key:
+        openai_api_key = get_openai_key_from_file()
     if openai_api_key:
         openai.api_key = openai_api_key
     
     system_prompt = (
-        "אתה עוזר פיננסי. נתח את החוזה והוצא סעיפים חשובים, סכומים, תאריכים, סיכונים והתחייבויות. החזר תמיד JSON."
+        "אתה עוזר פיננסי. נתח את החוזה והוצא סעיפים חשובים, סכומים, תאריכים, סיכונים והתחייבויות. החזר תמיד JSON בלבד, ללא הסברים."
     )
     user_prompt = (
         "Extract the following financial terms from the contract text: "
@@ -38,9 +55,9 @@ def analyze_contract(text, openai_api_key=None, model="gpt-4"):
             max_tokens=800
         )
         result = response.choices[0].message.content.strip()
-        # ניקוי פלט שלפעמים מכיל תווים מיותרים
-        if result.startswith("```json"):
-            result = result.replace("```json", "").replace("```", "").strip()
+        json_str = extract_json_from_text(result)
+        if json_str:
+            return json_str
         return result
     except Exception as e:
         print(f"Error parsing JSON: {e}")
@@ -48,3 +65,5 @@ def analyze_contract(text, openai_api_key=None, model="gpt-4"):
             "error": "Failed to parse response",
             "raw_response": str(e)
         })
+
+load_dotenv()
