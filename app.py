@@ -33,6 +33,48 @@ with main_tab:
     cat_sum = data.groupby(["category"])["amount"].sum().reset_index()
     st.bar_chart(cat_sum, x="category", y="amount")
 
+    # --- Cash Flow Forecast ---
+    st.markdown("---")
+    st.subheader("Cash Flow Forecast")
+    # גרף עמודות של סכומים היסטוריים לפי חודש
+    monthly = data.copy()
+    monthly['month'] = pd.to_datetime(monthly['date']).dt.to_period('M')
+    st.markdown("**Historical Monthly Cash Flow**")
+    st.bar_chart(monthly.groupby('month')['amount'].sum())
+    periods = st.slider("Select forecast periods (months)", min_value=3, max_value=24, value=6)
+    if st.button("Run Forecast"):
+        with st.spinner("Calculating forecast..."):
+            try:
+                # בדיקת טעינת מודולים מראש למניעת שגיאות
+                import sys
+                import pandas as pd
+                import numpy as np
+                from datetime import timedelta
+
+                # דיבאג נתונים
+                st.text(f"Data columns: {data.columns.tolist()}")
+                st.text(f"Data shape: {data.shape}")
+                
+                # הכנת DataFrame מתאים
+                forecast_data = data[['date', 'amount']].copy()
+                
+                # קריאה לפונקציה
+                forecast_df = services.forecast_cashflow(forecast_data, periods=periods)
+                
+                if not forecast_df.empty:
+                    # עיצוב וכותרת גרף
+                    st.success(f"Forecast generated for {periods} months")
+                    st.line_chart(forecast_df.set_index('date')['forecast'])
+                    st.dataframe(forecast_df, use_container_width=True)
+                else:
+                    st.info("No forecast data available.")
+            except Exception as e:
+                st.error(f"Forecast error: {str(e)}")
+                st.text(f"Error type: {type(e).__name__}")
+                # הדפסת שגיאה מפורטת
+                import traceback
+                st.code(traceback.format_exc())
+
 with inventory_tab:
     st.subheader("Inventory Levels by Component")
     inventory = data.dropna(subset=["component", "inventory_level"])
@@ -163,4 +205,4 @@ with contract_tab:
         st.error(f"Error in file upload: {str(e)}")
         st.info("The file might be too large or have a problematic filename. Try a smaller file with a simple English filename.")
 
-st.caption("© 2024 CashFlowIQ | Responsive Web & Mobile Dashboard")
+st.caption("© 2025 CashFlowIQ | Responsive Web & Mobile Dashboard | Beta Version")

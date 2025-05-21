@@ -1,3 +1,16 @@
+"""
+services.py - מודול שירותים עיקריים ל-CashFlowIQ
+
+פונקציות:
+- extract_text_from_pdf: חילוץ טקסט מקובץ PDF
+- analyze_contract: ניתוח חוזה באמצעות GPT
+- ask_contract_question: מענה לשאלות על החוזה
+- get_exchange_rate: שליפת שערי חליפין בזמן אמת
+- forecast_cashflow: חיזוי תזרים מזומנים
+
+כל פונקציה מתועדת ומופרדת באחריותה.
+"""
+
 import sys
 import PyPDF2
 import openai
@@ -5,10 +18,19 @@ import os
 import json
 import re
 from dotenv import load_dotenv
+import requests
+import pandas as pd
+import numpy as np
+from datetime import timedelta
 
 # חילוץ טקסט מ-PDF
 
 def extract_text_from_pdf(pdf_file):
+    """
+    חילוץ טקסט מקובץ PDF שהועלה ע"י המשתמש.
+    :param pdf_file: קובץ PDF (streamlit uploader)
+    :return: טקסט מלא מהקובץ
+    """
     reader = PyPDF2.PdfReader(pdf_file)
     text = ""
     for page in reader.pages:
@@ -31,6 +53,13 @@ def get_openai_key_from_file():
         return None
 
 def analyze_contract(text, openai_api_key=None, model="gpt-4"):
+    """
+    ניתוח חוזה באמצעות GPT, החזרת JSON מובנה עם סעיפים פיננסיים עיקריים.
+    :param text: טקסט החוזה
+    :param context: הקשר נוסף (אופציונלי)
+    :param model: דגם GPT לשימוש
+    :return: JSON כתוצאה מניתוח החוזה
+    """
     if not openai_api_key:
         openai_api_key = get_openai_key_from_file()
     if openai_api_key:
@@ -73,7 +102,12 @@ def analyze_contract(text, openai_api_key=None, model="gpt-4"):
 
 def ask_contract_question(contract_text, question, openai_api_key=None, model="gpt-4"):
     """
-    מקבל טקסט חוזה ושאלה חופשית, מחזיר תשובה חופשית מה-AI.
+    מענה לשאלה חופשית על החוזה באמצעות GPT.
+    :param contract_text: טקסט החוזה
+    :param question: שאלה מהמשתמש
+    :param context: הקשר נוסף (אופציונלי)
+    :param model: דגם GPT לשימוש
+    :return: תשובת GPT
     """
     if not openai_api_key:
         openai_api_key = get_openai_key_from_file()
@@ -96,5 +130,70 @@ def ask_contract_question(contract_text, question, openai_api_key=None, model="g
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"שגיאה בשליחת שאלה ל-AI: {str(e)}"
+
+def get_exchange_rate(base_currency, target_currency):
+    """
+    שליפת שער חליפין בזמן אמת מ-exchangerate.host או API דומה.
+    :param base_currency: מטבע מקור (למשל 'USD')
+    :param target_currency: מטבע יעד (למשל 'ILS')
+    :return: שער חליפין עדכני (float) או None במקרה של כשל
+    """
+    url = f"https://api.exchangerate.host/convert?from={base_currency}&to={target_currency}"
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('result', None)
+        else:
+            print(f"Exchange rate API error: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Exchange rate fetch error: {e}")
+        return None
+
+def forecast_cashflow(df, periods=12):
+    """
+    חיזוי תזרים מזומנים על בסיס נתונים היסטוריים.
+    :param df: DataFrame עם נתוני תזרים (עמודות: 'date', 'amount')
+    :param periods: מספר תקופות לחיזוי (חודשים קדימה)
+    :return: DataFrame עם תחזית (עמודות: 'date', 'forecast')
+    """
+    # בדיקה שהעמודות קיימות
+    if 'date' not in df.columns or 'amount' not in df.columns:
+        raise ValueError("DataFrame חייב לכלול עמודות 'date' ו-'amount'")
+    
+    # המרת תאריכים ומיון
+    df = df.copy()
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values('date')
+    
+    # חישוב ממוצע נע
+    avg_monthly = df.groupby(df['date'].dt.to_period('M'))['amount'].sum()
+    last_6_months_avg = avg_monthly.tail(6).mean()
+    print(f"[DEBUG] avg_monthly: {avg_monthly}")
+    print(f"[DEBUG] last_6_months_avg: {last_6_months_avg}")
+    
+    # קו מגמה פשוט - לוקח את השינוי הממוצע לחודש
+    if len(avg_monthly) > 1:
+        trend = (avg_monthly.iloc[-1] - avg_monthly.iloc[0]) / (len(avg_monthly) - 1)
+    else:
+        trend = 0
+    print(f"[DEBUG] trend: {trend}")
+    
+    # חיזוי - ממוצע אחרון + מגמה
+    last_date = df['date'].max()
+    forecast_dates = [last_date + pd.DateOffset(months=i+1) for i in range(periods)]
+    forecast_values = [last_6_months_avg + trend * (i+1) for i in range(periods)]
+    print(f"[DEBUG] forecast_dates: {forecast_dates}")
+    print(f"[DEBUG] forecast_values: {forecast_values}")
+    
+    # יצירת DataFrame עם התחזית
+    result = pd.DataFrame({
+        'date': forecast_dates,
+        'forecast': forecast_values
+    })
+    print(f"[DEBUG] result DataFrame:\n{result}")
+    
+    return result
 
 load_dotenv()
