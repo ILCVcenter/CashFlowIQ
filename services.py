@@ -37,12 +37,17 @@ def analyze_contract(text, openai_api_key=None, model="gpt-4"):
         openai.api_key = openai_api_key
     
     system_prompt = (
-        "אתה עוזר פיננסי. נתח את החוזה והוצא סעיפים חשובים, סכומים, תאריכים, סיכונים והתחייבויות. החזר תמיד JSON בלבד, ללא הסברים."
+        "You are a financial contract analysis assistant. Extract the following financial terms from the contract and return ONLY valid JSON, no explanations. "
+        "Each field should be a list of objects with the specified keys."
     )
     user_prompt = (
-        "Extract the following financial terms from the contract text: "
-        "1. Payment amounts\n2. Payment dates\n3. Payment terms\n4. Penalties\n5. Contract period\n"
-        "Return the result as a JSON object with these fields.\n\n" + text[:3000]
+        "Extract the following financial terms from the contract text and return them as a JSON object with these fields:\n"
+        "- Payment Amounts: a list of objects, each with 'Product', 'Description', and 'Value' fields.\n"
+        "- Payment Dates: a list of objects, each with 'Type', 'Description', and 'Date' fields.\n"
+        "- Payment Terms: a list of objects, each with 'Type', 'Description', and 'Details' fields.\n"
+        "- Penalties: a list of objects, each with 'Type', 'Description', and 'Value' fields.\n"
+        "- Contract Period: a list of objects, each with 'Type', 'Description', and 'Value' fields.\n"
+        "Return only valid JSON, with each field as a list of objects as described above. Do not add any text or explanation.\n\n" + text[:3000]
     )
     try:
         response = openai.ChatCompletion.create(
@@ -65,5 +70,31 @@ def analyze_contract(text, openai_api_key=None, model="gpt-4"):
             "error": "Failed to parse response",
             "raw_response": str(e)
         })
+
+def ask_contract_question(contract_text, question, openai_api_key=None, model="gpt-4"):
+    """
+    מקבל טקסט חוזה ושאלה חופשית, מחזיר תשובה חופשית מה-AI.
+    """
+    if not openai_api_key:
+        openai_api_key = get_openai_key_from_file()
+    if openai_api_key:
+        openai.api_key = openai_api_key
+    system_prompt = (
+        "אתה עוזר חוזים חכם. ענה בקצרה, ברור ומדויק על כל שאלה שתישאל לגבי החוזה המצורף."
+    )
+    user_prompt = f"חוזה:\n{contract_text[:3000]}\n\nשאלה: {question}"
+    try:
+        response = openai.ChatCompletion.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.2,
+            max_tokens=400
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"שגיאה בשליחת שאלה ל-AI: {str(e)}"
 
 load_dotenv()

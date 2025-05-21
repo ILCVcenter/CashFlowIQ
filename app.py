@@ -52,26 +52,106 @@ with expenses_tab:
 
 with contract_tab:
     st.subheader("Contract Analysis (PDF)")
-    model = st.selectbox("בחר מודל GPT", ["gpt-3.5-turbo", "gpt-4"], index=1)
-    
-    # משפר את הטיפול בשגיאות העלאת קובצים
+    model = st.selectbox("Select GPT Model", ["gpt-3.5-turbo", "gpt-4"], index=1)
+    contract_text = ""
+    contract_analysis = None
+    contract_analysis_error = None
+    if 'chat_history' not in st.session_state:
+        st.session_state['chat_history'] = []
+    ai_answer = None
     try:
         uploaded_file = st.file_uploader("Upload Contract PDF", type=["pdf"], accept_multiple_files=False)
         if uploaded_file is not None:
             with st.spinner("Extracting text from PDF..."):
                 try:
                     text = services.extract_text_from_pdf(uploaded_file)
+                    contract_text = text
                     if text.strip():
                         st.text_area("Contract Text", text, height=200)
-                        if st.button("Analyze Contract with GPT"):
-                            with st.spinner("Analyzing contract with GPT..."):
+                        # ניתוח אוטומטי של החוזה
+                        with st.spinner("Analyzing contract with GPT..."):
+                            try:
+                                result = services.analyze_contract(text, None, model)
+                                import json
                                 try:
-                                    result = services.analyze_contract(text, None, model)
-                                    st.success("Contract Analysis Result:")
-                                    st.json(result)
-                                except Exception as e:
-                                    st.error(f"Error analyzing contract: {str(e)}")
-                                    st.info("Try again or check your network connection.")
+                                    contract_analysis = json.loads(result)
+                                except Exception:
+                                    contract_analysis_error = result
+                            except Exception as e:
+                                contract_analysis_error = f"Error analyzing contract: {str(e)}"
+                        if contract_analysis:
+                            st.success("Contract Analysis Result:")
+                            import pandas as pd
+                            def render_list_of_dicts_table(lst):
+                                if not lst:
+                                    st.info("No data available.")
+                                    return
+                                df = pd.DataFrame(lst)
+                                st.table(df)
+                            def render_vertical_table(data):
+                                rows = []
+                                for k, v in data.items():
+                                    if isinstance(v, (list, tuple)):
+                                        v = ', '.join(str(i) for i in v)
+                                    elif isinstance(v, dict):
+                                        v = ', '.join([f"{ik}: {iv}" for ik, iv in v.items()])
+                                    rows.append({"Field": k, "Value": v})
+                                df = pd.DataFrame(rows)
+                                st.table(df)
+                            for key, value in contract_analysis.items():
+                                st.markdown(f"**{key}:**")
+                                # הצגת רשימה של אובייקטים כטבלה
+                                if isinstance(value, list) and value and isinstance(value[0], dict):
+                                    render_list_of_dicts_table(value)
+                                elif isinstance(value, dict):
+                                    render_vertical_table(value)
+                                elif isinstance(value, list):
+                                    st.markdown("<ul>" + ''.join([f"<li>{v}</li>" for v in value]) + "</ul>", unsafe_allow_html=True)
+                                else:
+                                    st.info(value)
+                            # הצגת הערות/אזהרות בצורה טבלאית אם צריך
+                            def render_warning_table(val, title):
+                                if isinstance(val, list) and val and isinstance(val[0], dict):
+                                    st.warning(f"{title}:")
+                                    render_list_of_dicts_table(val)
+                                elif isinstance(val, list):
+                                    st.warning(f"{title}:<ul>" + ''.join([f"<li>{v}</li>" for v in val]) + "</ul>", unsafe_allow_html=True)
+                                elif val:
+                                    st.warning(f"{title}: {val}")
+                            if 'Penalties' in contract_analysis and contract_analysis['Penalties']:
+                                render_warning_table(contract_analysis['Penalties'], "Attention")
+                            if 'Risks' in contract_analysis and contract_analysis['Risks']:
+                                render_warning_table(contract_analysis['Risks'], "Risks")
+                        elif contract_analysis_error:
+                            st.error(contract_analysis_error)
+                        st.markdown("---")
+                        st.subheader(":speech_balloon: Ask the AI about the contract")
+                        for msg in st.session_state['chat_history']:
+                            if msg['role'] == 'user':
+                                st.markdown(f"<div style='text-align:left; background:#e6f0ff; padding:8px; border-radius:8px; margin-bottom:4px;'><b>You:</b> {msg['content']}</div>", unsafe_allow_html=True)
+                            else:
+                                content = msg['content']
+                                # תמיד מיושר לשמאל (LTR)
+                                if content.strip().startswith('1.') or '\n1.' in content:
+                                    items = [line.strip() for line in content.split('\n') if line.strip() and (line.strip()[0].isdigit() and line.strip()[1] in ['.',')'])]
+                                    if items:
+                                        st.markdown("<div style='text-align:left; background:#f6ffe6; padding:8px; border-radius:8px; margin-bottom:8px;'><b>AI:</b><ul style='text-align:left'>" + ''.join([f"<li>{v}</li>" for v in items]) + "</ul></div>", unsafe_allow_html=True)
+                                    else:
+                                        st.markdown(f"<div style='text-align:left; background:#f6ffe6; padding:8px; border-radius:8px; margin-bottom:8px;'><b>AI:</b> {content}</div>", unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f"<div style='text-align:left; background:#f6ffe6; padding:8px; border-radius:8px; margin-bottom:8px;'><b>AI:</b> {content}</div>", unsafe_allow_html=True)
+                        user_question = st.text_input("Type your question about the contract", key="contract_chat_input")
+                        ask_clicked = st.button("Ask AI")
+                        clear_clicked = st.button("Clear Chat")
+                        if ask_clicked and user_question.strip():
+                            with st.spinner("AI is analyzing your question..."):
+                                ai_answer = services.ask_contract_question(contract_text, user_question, None, model)
+                                st.session_state['chat_history'].append({'role': 'user', 'content': user_question})
+                                st.session_state['chat_history'].append({'role': 'ai', 'content': ai_answer})
+                            st.rerun()
+                        if clear_clicked:
+                            st.session_state['chat_history'] = []
+                            st.rerun()
                     else:
                         st.warning("Could not extract text from the PDF. The file might be scanned or password-protected.")
                 except Exception as e:
