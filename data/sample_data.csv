@@ -1,25 +1,27 @@
 date,amount,category,type,description,component,inventory_level
-2024-01-01,5000,Income,Sale,Product A Sales,,
-2024-01-15,-1200,Expense,Material,Raw Materials Purchase,Metal,50
-2024-01-20,-800,Expense,Utility,Electricity Bill,,
-2024-01-25,3500,Income,Service,Maintenance Service,,
-2024-02-01,4800,Income,Sale,Product B Sales,,
-2024-02-10,-1500,Expense,Material,Raw Materials Purchase,Plastic,45
-2024-02-15,-950,Expense,Salary,Staff Payment,,
-2024-02-28,3200,Income,Sale,Product A Sales,,
-2024-03-05,5100,Income,Sale,Product C Sales,,
-2024-03-12,-1800,Expense,Material,Raw Materials Purchase,Electronics,60
-2024-03-18,-1100,Expense,Utility,Water and Electricity,,
-2024-03-25,3800,Income,Service,Installation Service,,
-2024-04-01,4950,Income,Sale,Product B Sales,,
-2024-04-10,-1650,Expense,Material,Raw Materials Purchase,Wood,55
-2024-04-15,-1200,Expense,Salary,Staff Payment,,
-2024-04-28,3700,Income,Sale,Product A Sales,,
-2024-05-05,5200,Income,Sale,Product C Sales,,
-2024-05-12,-1900,Expense,Material,Raw Materials Purchase,Metal,65
-2024-05-18,-1200,Expense,Utility,Electricity Bill,,
-2024-05-25,4100,Income,Service,Maintenance Service,,
-2024-06-01,5100,Income,Sale,Product B Sales,,
-2024-06-10,-1750,Expense,Material,Raw Materials Purchase,Plastic,50
-2024-06-15,-1300,Expense,Salary,Staff Payment,,
-2024-06-28,3900,Income,Sale,Product A Sales,,
+2024-01-01,4448.0,Income,Sale,Product A Sales,,
+2024-01-21,-1067.52,Expense,Material,Raw Materials Purchase,Metal,50.0
+2024-02-10,-711.68,Expense,Utility,Electricity Bill,,
+2024-03-01,3113.6,Income,Service,Maintenance Service,,
+2024-03-21,4270.08,Income,Sale,Product B Sales,,
+2024-04-11,-1334.4,Expense,Material,Raw Materials Purchase,Plastic,45.0
+2024-05-01,-845.12,Expense,Salary,Staff Payment,,
+2024-05-21,2846.72,Income,Sale,Product A Sales,,
+2024-06-10,4536.96,Income,Sale,Product C Sales,,
+2024-07-01,-1601.28,Expense,Material,Raw Materials Purchase,Electronics,60.0
+2024-07-21,-979.2,Expense,Utility,Water and Electricity,,
+2024-08-10,3379.2,Income,Service,Installation Service,,
+2024-08-30,4402.32,Income,Sale,Product B Sales,,
+2024-09-20,-1468.32,Expense,Material,Raw Materials Purchase,Wood,55.0
+2024-10-10,-1068.48,Expense,Salary,Staff Payment,,
+2024-10-30,3292.48,Income,Sale,Product A Sales,,
+2024-11-19,4627.2,Income,Sale,Product C Sales,,
+2024-12-10,25000.0,Income,Investment,Angel Investor Funding,,
+2024-12-30,-1690.56,Expense,Material,Raw Materials Purchase,Metal,65.0
+2025-01-19,-1068.48,Expense,Utility,Electricity Bill,,
+2025-02-08,3648.96,Income,Service,Maintenance Service,,
+2025-03-01,4537.92,Income,Sale,Product B Sales,,
+2025-03-21,-1557.76,Expense,Material,Raw Materials Purchase,Plastic,50.0
+2025-04-10,-1157.12,Expense,Salary,Staff Payment,,
+2025-04-30,-15000.0,Expense,Equipment,New Production Machine,,
+2025-05-21,3470.72,Income,Sale,Product A Sales,,
