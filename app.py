@@ -152,7 +152,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # טעינת נתונים
-@st.cache_data
+@st.cache_data(ttl=60)  # מטמון לשעה אחת בלבד לאפשר רענון נתונים
 def load_data():
     df = pd.read_csv("data/sample_data.csv")
     return df
@@ -202,8 +202,8 @@ with st.container():
         col1, col2, col3 = st.columns(3)
         with col1:
             min_date = pd.to_datetime(data_converted['date']).min().date()
-            max_date = pd.to_datetime('today').date()
-            date_range = st.date_input("Date Range", [min_date, max_date], min_value=min_date, max_value=max_date)
+            max_date = pd.to_datetime(data_converted['date']).max().date()
+            date_range = st.date_input("Date Range", [min_date, max_date], min_value=min_date, max_value=None)
         
         with col2:
             category_options = data_converted['category'].unique()
@@ -289,21 +289,38 @@ with st.container():
                 monthly_inflows = data_for_cashflow[data_for_cashflow['amount'] > 0].groupby('month')['amount'].sum()
                 monthly_outflows = data_for_cashflow[data_for_cashflow['amount'] < 0].groupby('month')['amount'].sum().abs()
                 monthly_cashflow = pd.DataFrame({'Inflows': monthly_inflows, 'Outflows': monthly_outflows}).fillna(0)
-                fig, ax = plt.subplots(figsize=(2.5, 1.8), facecolor='#181943')
-                ax.set_facecolor('#181943')
-                monthly_cashflow.plot(kind='bar', ax=ax, rot=0, color=['#00CFFF', '#9966FF'])
-                ax.set_xlabel('Month', fontsize=7, color='white')
-                ax.set_ylabel('Amount', fontsize=7, color='white')
-                ax.set_title('Monthly Cash Flow', fontsize=8, color='white')
-                ax.tick_params(axis='x', labelrotation=30, labelsize=6, colors='white')
-                ax.tick_params(axis='y', labelsize=6, colors='white')
-                ax.spines['bottom'].set_color('white')
-                ax.spines['top'].set_color('white')
-                ax.spines['left'].set_color('white')
-                ax.spines['right'].set_color('white')
-                ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
-                ax.legend(fontsize=6, facecolor='#23255d', edgecolor='#23255d', labelcolor='white')
-                st.pyplot(fig)
+                
+                # תמיד להשתמש ב-try-except בגרפים למניעת שגיאות
+                try:
+                    fig, ax = plt.subplots(figsize=(2.5, 1.8), facecolor='#181943')
+                    ax.set_facecolor('#181943')
+                    monthly_cashflow.plot(kind='bar', ax=ax, rot=30, color=['#00CFFF', '#9966FF'])  # שינוי זווית סיבוב לקריאות
+                    
+                    # טיפול בתאריכים לקריאות טובה יותר
+                    if len(monthly_cashflow.index) > 10:
+                        # אם יש יותר מדי תאריכים, הצג רק חלק מהם
+                        step = max(1, len(monthly_cashflow.index) // 10)
+                        xlabels = ax.get_xticklabels()
+                        for i, label in enumerate(xlabels):
+                            if i % step != 0:
+                                label.set_visible(False)
+                    
+                    ax.set_xlabel('Month', fontsize=7, color='white')
+                    ax.set_ylabel('Amount', fontsize=7, color='white')
+                    ax.set_title('Monthly Cash Flow', fontsize=8, color='white', pad=15)  # תוספת pad לכותרת
+                    ax.tick_params(axis='x', labelrotation=45, labelsize=6, colors='white')  # שינוי זווית סיבוב לקריאות
+                    ax.tick_params(axis='y', labelsize=6, colors='white')
+                    ax.spines['bottom'].set_color('white')
+                    ax.spines['top'].set_color('white')
+                    ax.spines['left'].set_color('white')
+                    ax.spines['right'].set_color('white')
+                    ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
+                    ax.legend(fontsize=6, facecolor='#23255d', edgecolor='#23255d', labelcolor='white')
+                    
+                    plt.tight_layout()  # שיפור הפריסה האוטומטית
+                    st.pyplot(fig)
+                except Exception as e:
+                    st.warning(f"לא ניתן להציג את הגרף: {str(e)}")
             with tab2:
                 balance_over_time = pd.DataFrame({'Date': daily_cashflow['date'], 'Balance': daily_cashflow['closing_balance']}).set_index('Date')
                 fig, ax = plt.subplots(figsize=(2.5, 1.8), facecolor='#181943')
@@ -358,9 +375,9 @@ with st.container():
         forecast_col1, forecast_col2, forecast_col3 = st.columns(3)
         with forecast_col1:
             forecast_min_date = pd.to_datetime('today').date()
-            forecast_max_date = forecast_min_date + pd.DateOffset(years=1)
+            forecast_max_date = forecast_min_date + pd.DateOffset(years=3)
             forecast_max_date = forecast_max_date.date() if hasattr(forecast_max_date, 'date') else forecast_max_date
-            forecast_date_range = st.date_input("Forecast Date Range", [forecast_min_date, forecast_max_date], min_value=forecast_min_date, max_value=forecast_max_date, key="forecast_date_range")
+            forecast_date_range = st.date_input("Forecast Date Range", [forecast_min_date, forecast_max_date], min_value=forecast_min_date, max_value=None, key="forecast_date_range")
         with forecast_col2:
             forecast_category_options = data_converted['category'].unique()
             forecast_category_filter = st.multiselect("Forecast Category Filter", forecast_category_options, default=[])
@@ -380,6 +397,16 @@ with st.container():
         # חישוב תחזית בזמן אמת
         try:
             forecast_data = forecast_data_for_cashflow[['date', 'amount']].copy()
+            
+            # וידוא שעמודת התאריך היא מסוג datetime - חשוב כדי שתזוהה נכון
+            forecast_data['date'] = pd.to_datetime(forecast_data['date'])
+            
+            # אם אין נתונים, יצירת תחזית על בסיס כל הנתונים
+            if forecast_data.empty:
+                st.warning("אין נתוני תזרים בטווח התאריכים שנבחר לתחזית. יוצרת תחזית על בסיס כל הנתונים.")
+                forecast_data = data_converted[['date', 'amount']].copy()
+                forecast_data['date'] = pd.to_datetime(forecast_data['date'])
+            
             forecast_df = services.forecast_cashflow(forecast_data, periods=6)  # ברירת מחדל 6 חודשים
             if not forecast_df.empty:
                 last_balance = forecast_data_for_cashflow['amount'].cumsum().iloc[-1] if not forecast_data_for_cashflow.empty else 100000
@@ -432,63 +459,123 @@ with st.container():
                         chart_tab1, chart_tab2, chart_tab3 = st.tabs(["Monthly Cash Flow", "Balance Over Time", "Income vs Expenses"])
                         with chart_tab1:
                             # Monthly Cash Flow Forecast
-                            forecast_chart_data_month = forecast_chart_data.resample('ME').sum()
-                            fig, ax = plt.subplots(figsize=(3, 1.8), facecolor='#181943')
-                            ax.set_facecolor('#181943')
-                            forecast_chart_data_month[['Forecast']].plot(kind='bar', ax=ax, rot=0, color='#00CFFF')
-                            ax.set_xlabel('Month', fontsize=8, color='white')
-                            ax.set_ylabel('Forecast', fontsize=8, color='white')
-                            ax.set_title('Monthly Cash Flow Forecast', fontsize=10, color='white')
-                            ax.tick_params(axis='x', labelrotation=30, labelsize=6, colors='white')
-                            ax.tick_params(axis='y', labelsize=6, colors='white')
-                            ax.spines['bottom'].set_color('white')
-                            ax.spines['top'].set_color('white')
-                            ax.spines['left'].set_color('white')
-                            ax.spines['right'].set_color('white')
-                            ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
-                            
-                            # הצגת ערכים מספריים מעל העמודות
-                            for i, val in enumerate(forecast_chart_data_month['Forecast']):
-                                ax.text(i, val + (0.1 * val if val > 0 else -0.1 * val), 
-                                        f'${int(val)}', ha='center', va='bottom' if val > 0 else 'top', 
-                                        fontsize=6, color='white')
-                                
-                            st.pyplot(fig)
+                            try:
+                                # וידוא שיש נתונים
+                                if not forecast_chart_data.empty and not forecast_chart_data['Forecast'].isnull().all():
+                                    forecast_chart_data_month = forecast_chart_data.resample('ME').sum()
+                                    
+                                    # בדיקה שיש נתונים אחרי הפעולה
+                                    if not forecast_chart_data_month.empty:
+                                        fig, ax = plt.subplots(figsize=(3, 2.3), facecolor='#181943')  # גובה גדול יותר
+                                        ax.set_facecolor('#181943')
+                                        forecast_chart_data_month[['Forecast']].plot(kind='bar', ax=ax, rot=30, color='#00CFFF')
+                                        
+                                        # עיצוב תבנית תאריך - רק תאריך ללא שעה
+                                        date_formatter = plt.matplotlib.dates.DateFormatter('%Y-%m-%d')
+                                        if len(forecast_chart_data_month.index) > 0:
+                                            xlabels = [item.strftime('%Y-%m-%d') for item in forecast_chart_data_month.index.to_list()]
+                                            ax.set_xticklabels(xlabels)
+                                        
+                                        ax.set_xlabel('Month', fontsize=8, color='white')
+                                        ax.set_ylabel('Forecast', fontsize=8, color='white')
+                                        ax.set_title('Monthly Cash Flow Forecast', fontsize=10, color='white', pad=15)  # תוספת pad לכותרת
+                                        ax.tick_params(axis='x', labelrotation=30, labelsize=6, colors='white')
+                                        ax.tick_params(axis='y', labelsize=6, colors='white')
+                                        ax.spines['bottom'].set_color('white')
+                                        ax.spines['top'].set_color('white')
+                                        ax.spines['left'].set_color('white')
+                                        ax.spines['right'].set_color('white')
+                                        ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
+                                        
+                                        # הצגת ערכים מספריים מעל העמודות רק אם יש נתונים
+                                        for i, val in enumerate(forecast_chart_data_month['Forecast']):
+                                            if not pd.isna(val):  # רק אם הערך אינו NaN
+                                                ax.text(i, val + (0.1 * val if val > 0 else -0.1 * abs(val)), 
+                                                        f'${int(val)}', ha='center', va='bottom' if val > 0 else 'top', 
+                                                        fontsize=6, color='white')
+                                        
+                                        plt.tight_layout()  # שיפור האוטומטי של הפריסה
+                                        st.pyplot(fig)
+                                    else:
+                                        st.warning("אין נתונים מספיקים להצגת גרף תחזית חודשי.")
+                                else:
+                                    st.warning("אין נתוני תחזית זמינים להצגת גרף.")
+                            except Exception as e:
+                                st.warning(f"לא ניתן להציג את גרף התחזית החודשי: {str(e)}")
                         with chart_tab2:
-                            fig, ax = plt.subplots(figsize=(3, 1.8), facecolor='#181943')
-                            ax.set_facecolor('#181943')
-                            forecast_chart_data[['Balance']].plot(ax=ax, color='#00CFFF', linewidth=2)
-                            ax.set_xlabel('Date', fontsize=8, color='white')
-                            ax.set_ylabel('Balance', fontsize=8, color='white')
-                            ax.set_title('Projected Balance Over Time', fontsize=10, color='white')
-                            ax.tick_params(axis='x', labelsize=6, colors='white')
-                            ax.tick_params(axis='y', labelsize=6, colors='white')
-                            ax.spines['bottom'].set_color('white')
-                            ax.spines['top'].set_color('white')
-                            ax.spines['left'].set_color('white')
-                            ax.spines['right'].set_color('white')
-                            ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
-                            st.pyplot(fig)
+                            try:
+                                # וידוא שיש נתונים
+                                if not forecast_chart_data.empty and not forecast_chart_data['Balance'].isnull().all():
+                                    fig, ax = plt.subplots(figsize=(3, 2.3), facecolor='#181943')
+                                    ax.set_facecolor('#181943')
+                                    forecast_chart_data[['Balance']].plot(ax=ax, color='#00CFFF', linewidth=2)
+                                    
+                                    # עיצוב תבנית תאריך - רק תאריך ללא שעה
+                                    date_formatter = plt.matplotlib.dates.DateFormatter('%Y-%m-%d')
+                                    ax.xaxis.set_major_formatter(date_formatter)
+                                    
+                                    ax.set_xlabel('Date', fontsize=8, color='white')
+                                    ax.set_ylabel('Balance', fontsize=8, color='white')
+                                    ax.set_title('Projected Balance Over Time', fontsize=10, color='white', pad=15)  # תוספת pad לכותרת
+                                    ax.tick_params(axis='x', labelsize=6, colors='white')
+                                    ax.tick_params(axis='y', labelsize=6, colors='white')
+                                    ax.spines['bottom'].set_color('white')
+                                    ax.spines['top'].set_color('white')
+                                    ax.spines['left'].set_color('white')
+                                    ax.spines['right'].set_color('white')
+                                    ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
+                                    
+                                    plt.tight_layout()  # שיפור האוטומטי של הפריסה
+                                    st.pyplot(fig)
+                                else:
+                                    st.warning("אין נתוני מאזן זמינים להצגת גרף.")
+                            except Exception as e:
+                                st.warning(f"לא ניתן להציג את גרף המאזן: {str(e)}")
                         with chart_tab3:
-                            # הכנסות/הוצאות לפי סוג
-                            income_types = forecast_display[forecast_display['forecast'] > 0]['forecast']
-                            expense_types = forecast_display[forecast_display['forecast'] < 0]['forecast'].abs()
-                            fig, ax = plt.subplots(figsize=(3, 1.8), facecolor='#181943')
-                            ax.set_facecolor('#181943')
-                            income_types.plot(kind='bar', color='#00CFFF', ax=ax, position=0, width=0.4, label='Income')
-                            expense_types.plot(kind='bar', color='#9966FF', ax=ax, position=1, width=0.4, label='Expense')
-                            ax.set_xlabel('Period', fontsize=8, color='white')
-                            ax.set_ylabel('Amount', fontsize=8, color='white')
-                            ax.set_title('Income vs Expenses (Forecast)', fontsize=10, color='white')
-                            ax.tick_params(axis='x', labelsize=6, colors='white')
-                            ax.tick_params(axis='y', labelsize=6, colors='white')
-                            ax.spines['bottom'].set_color('white')
-                            ax.spines['top'].set_color('white')
-                            ax.spines['left'].set_color('white')
-                            ax.spines['right'].set_color('white')
-                            ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
-                            ax.legend(fontsize=6, facecolor='#23255d', edgecolor='#23255d', labelcolor='white')
-                            st.pyplot(fig)
+                            try:
+                                # וידוא שיש נתונים
+                                if not forecast_display.empty and not forecast_display['forecast'].isnull().all():
+                                    # הכנסות/הוצאות לפי סוג
+                                    income_types = forecast_display[forecast_display['forecast'] > 0]['forecast']
+                                    expense_types = forecast_display[forecast_display['forecast'] < 0]['forecast'].abs()
+                                    
+                                    if not income_types.empty or not expense_types.empty:
+                                        fig, ax = plt.subplots(figsize=(3, 2.3), facecolor='#181943')
+                                        ax.set_facecolor('#181943')
+                                        
+                                        # וידוא שיש נתונים לפני הציור
+                                        if not income_types.empty:
+                                            income_types.plot(kind='bar', color='#00CFFF', ax=ax, position=0, width=0.4, label='Income')
+                                        if not expense_types.empty:
+                                            expense_types.plot(kind='bar', color='#9966FF', ax=ax, position=1, width=0.4, label='Expense')
+                                        
+                                        ax.set_xlabel('Period', fontsize=8, color='white')
+                                        ax.set_ylabel('Amount', fontsize=8, color='white')
+                                        ax.set_title('Income vs Expenses (Forecast)', fontsize=10, color='white', pad=15)  # תוספת pad לכותרת
+                                        
+                                        # עיצוב תאריכים
+                                        if len(forecast_display['date']) > 0:
+                                            xlabels = [item.strftime('%Y-%m-%d') for item in forecast_display['date']]
+                                            if len(xlabels) == len(ax.get_xticklabels()):
+                                                ax.set_xticklabels(xlabels, rotation=30)
+                                        
+                                        ax.tick_params(axis='x', labelsize=6, colors='white')
+                                        ax.tick_params(axis='y', labelsize=6, colors='white')
+                                        ax.spines['bottom'].set_color('white')
+                                        ax.spines['top'].set_color('white')
+                                        ax.spines['left'].set_color('white')
+                                        ax.spines['right'].set_color('white')
+                                        ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
+                                        ax.legend(fontsize=6, facecolor='#23255d', edgecolor='#23255d', labelcolor='white')
+                                        
+                                        plt.tight_layout()  # שיפור האוטומטי של הפריסה
+                                        st.pyplot(fig)
+                                    else:
+                                        st.warning("אין נתוני הכנסות/הוצאות זמינים להצגת גרף.")
+                                else:
+                                    st.warning("אין נתוני תחזית זמינים להצגת גרף.")
+                            except Exception as e:
+                                st.warning(f"לא ניתן להציג את גרף ההכנסות והוצאות: {str(e)}")
             else:
                 st.info("No forecast data available.")
         except Exception as e:
@@ -526,6 +613,67 @@ with st.container():
             file_name='cashflow_data.csv',
             mime='text/csv',
         )
+
+        # --- העלאת קובץ CSV חדש והוספת נתונים ---
+        uploaded_file = st.file_uploader("העלה קובץ CSV להוספת נתונים", type=["csv"])
+        if uploaded_file is not None:
+            try:
+                new_data = pd.read_csv(uploaded_file)
+                
+                # המרת עמודת התאריך לפורמט אחיד
+                if 'date' in new_data.columns:
+                    # ניסיון להמיר תאריכים בכל פורמט אפשרי
+                    try:
+                        new_data['date'] = pd.to_datetime(new_data['date'])
+                        # המרה לפורמט YYYY-MM-DD אחיד
+                        new_data['date'] = new_data['date'].dt.strftime('%Y-%m-%d')
+                        st.success("התאריכים הומרו בהצלחה לפורמט YYYY-MM-DD")
+                    except Exception as e:
+                        st.warning(f"שגיאה בהמרת התאריכים: {e}. מנסה פורמט אחר...")
+                        try:
+                            # ניסיון להמיר עם פורמט ספציפי
+                            new_data['date'] = pd.to_datetime(new_data['date'], format='%d/%m/%Y')
+                            new_data['date'] = new_data['date'].dt.strftime('%Y-%m-%d')
+                            st.success("התאריכים הומרו בהצלחה לפורמט YYYY-MM-DD")
+                        except:
+                            st.error("לא ניתן להמיר את התאריכים. אנא בדוק שהתאריכים בפורמט תקין.")
+                
+                # מיזוג הנתונים
+                data_converted = pd.concat([data_converted, new_data], ignore_index=True)
+                
+                # הסרת כפילויות (לפי כל העמודות)
+                data_converted = data_converted.drop_duplicates()
+                
+                # הצגת הודעת הצלחה
+                st.success(f"הנתונים נוספו בהצלחה! נוספו {len(new_data)} שורות.")
+                
+                # אפשרות להציג חלק מהנתונים החדשים
+                with st.expander("הצג את הנתונים החדשים שנוספו"):
+                    st.dataframe(new_data.head(10))
+                    
+                # אפשרות להוריד את הקובץ המשולב
+                csv_merged = data_converted.to_csv(index=False).encode('utf-8')
+                download_col1, download_col2 = st.columns(2)
+                with download_col1:
+                    st.download_button(
+                        label="הורד את כל הנתונים (CSV)",
+                        data=csv_merged,
+                        file_name='merged_cashflow_data.csv',
+                        mime='text/csv',
+                    )
+                with download_col2:
+                    # אפשרות לשמור את הנתונים לקובץ המקור
+                    save_to_source = st.button("שמור נתונים לקובץ המקור ורענן")
+                    if save_to_source:
+                        try:
+                            data_converted.to_csv("data/sample_data.csv", index=False)
+                            st.cache_data.clear()  # מחיקת המטמון כדי לחייב טעינה מחדש
+                            st.success("הנתונים נשמרו בהצלחה לקובץ המקור! לחץ על Rerun כדי לראות את השינויים.")
+                            st.rerun()  # רענון האפליקציה
+                        except Exception as e:
+                            st.error(f"שגיאה בשמירת הנתונים: {e}")
+            except Exception as e:
+                st.error(f"שגיאה בקריאת הקובץ: {e}")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with contract_tab:
@@ -607,18 +755,37 @@ with st.container():
                             st.subheader(":speech_balloon: Ask the AI about the contract")
                             for msg in st.session_state['chat_history']:
                                 if msg['role'] == 'user':
-                                    st.markdown(f"<div style='text-align:left; background:#e6f0ff; padding:8px; border-radius:8px; margin-bottom:4px;'><b>You:</b> {msg['content']}</div>", unsafe_allow_html=True)
+                                    st.markdown(f"<div style='text-align:left; background:#181943; padding:8px; border-radius:8px; margin-bottom:4px; color:black;'><b>You:</b> {msg['content']}</div>", unsafe_allow_html=True)
                                 else:
                                     content = msg['content']
                                     # תמיד מיושר לשמאל (LTR)
                                     if content.strip().startswith('1.') or '\n1.' in content:
                                         items = [line.strip() for line in content.split('\n') if line.strip() and (line.strip()[0].isdigit() and line.strip()[1] in ['.',')'])]
                                         if items:
-                                            st.markdown("<div style='text-align:left; background:#f6ffe6; padding:8px; border-radius:8px; margin-bottom:8px;'><b>AI:</b><ul style='text-align:left'>" + ''.join([f"<li>{v}</li>" for v in items]) + "</ul></div>", unsafe_allow_html=True)
+                                            st.markdown("<div style='text-align:left; background:#23255d; padding:8px; border-radius:8px; margin-bottom:8px; color:black;'><b>AI:</b><ul style='text-align:left; color:black;'>" + ''.join([f"<li>{v}</li>" for v in items]) + "</ul></div>", unsafe_allow_html=True)
                                         else:
-                                            st.markdown(f"<div style='text-align:left; background:#f6ffe6; padding:8px; border-radius:8px; margin-bottom:8px;'><b>AI:</b> {content}</div>", unsafe_allow_html=True)
+                                            st.markdown(f"<div style='text-align:left; background:#23255d; padding:8px; border-radius:8px; margin-bottom:8px; color:black;'><b>AI:</b> {content}</div>", unsafe_allow_html=True)
                                     else:
-                                        st.markdown(f"<div style='text-align:left; background:#f6ffe6; padding:8px; border-radius:8px; margin-bottom:8px;'><b>AI:</b> {content}</div>", unsafe_allow_html=True)
+                                        st.markdown(f"<div style='text-align:left; background:#23255d; padding:8px; border-radius:8px; margin-bottom:8px; color:black;'><b>AI:</b> {content}</div>", unsafe_allow_html=True)
+                            
+                            # סגנון כפתורים
+                            st.markdown("""
+                            <style>
+                            div[data-testid="stButton"] button {
+                                background-color: #23255d !important;
+                                color: white !important;
+                                border: none !important;
+                                padding: 0.5rem 1rem !important;
+                                border-radius: 8px !important;
+                                font-weight: bold !important;
+                            }
+                            div[data-testid="stButton"] button:hover {
+                                background-color: #181943 !important;
+                                border: 1px solid #00CFFF !important;
+                            }
+                            </style>
+                            """, unsafe_allow_html=True)
+                            
                             user_question = st.text_input("Type your question about the contract", key="contract_chat_input")
                             ask_clicked = st.button("Ask AI")
                             clear_clicked = st.button("Clear Chat")
@@ -652,41 +819,116 @@ with st.container():
         run_query = st.button("Run Query")
         if run_query and nl_query:
             with st.spinner("Processing query..."):
-                table_schema = ", ".join(data.columns.tolist())
-                sample_data = data.head(3).to_string(index=False)
-                sql_query = utils.nl_to_sql(nl_query, table_schema, sample_data)
-                st.code(sql_query, language="sql")
-                if "error" in sql_query.lower() or "שגיאה" in sql_query.lower():
-                    st.error(f"AI Error: {sql_query}")
-                else:
-                    try:
-                        results = utils.execute_sql(data, sql_query)
-                        st.success("Query Results:")
-                        st.dataframe(results)
-                        # שמירת תוצאות השאילתה ב-session_state
-                        st.session_state['query_results'] = results
-                        st.session_state['last_query'] = sql_query
-                    except Exception as e:
-                        st.error(f"Error running query: {str(e)}")
-                        st.session_state['query_results'] = None
-                        st.session_state['last_query'] = None
+                try:
+                    # שמירה על מבנה נתונים אחיד
+                    table_schema = ", ".join(data.columns.tolist())
+                    sample_data = data.head(3).to_string(index=False)
+                    
+                    # קריאה מוגנת לפונקציית תרגום שאילתה
+                    sql_query = utils.nl_to_sql(
+                        question=nl_query, 
+                        table_schema=table_schema, 
+                        sample_data=sample_data,
+                        openai_api_key=None  # ישתמש בערך ברירת מחדל
+                    )
+                    
+                    # הצגת ה-SQL שנוצר
+                    st.code(sql_query, language="sql")
+                    
+                    # בדיקה אם יש שגיאות בטקסט התשובה
+                    if "error" in sql_query.lower() or "שגיאה" in sql_query.lower():
+                        st.error(f"AI Error: {sql_query}")
+                    else:
+                        try:
+                            # הרץ את השאילתה על הנתונים
+                            results = utils.execute_sql(data, sql_query)
+                            
+                            # הצג תוצאות והוסף לסשן
+                            st.success("Query Results:")
+                            st.dataframe(results)
+                            
+                            # שמירת תוצאות השאילתה ב-session_state
+                            st.session_state['query_results'] = results
+                            st.session_state['last_query'] = sql_query
+                        except Exception as e:
+                            st.error(f"Error running query: {str(e)}")
+                            st.session_state['query_results'] = None
+                            st.session_state['last_query'] = None
+                except Exception as e:
+                    st.error(f"Error processing query: {str(e)}")
+                    st.session_state['query_results'] = None
+                    st.session_state['last_query'] = None
         # הצגת ויזואליזציה רק אם יש תוצאות בשאילתה האחרונה
         results = st.session_state.get('query_results')
         if results is not None and not results.empty and len(results.columns) >= 2:
             numeric_cols = results.select_dtypes(include=['number']).columns
             if len(numeric_cols) > 0 and len(results) > 1:
                 st.subheader("Visualization")
-                chart_type = st.selectbox("Select chart type", ["Bar Chart", "Line Chart", "Scatter Plot", "Pie Chart"], key="chart_type")
-                if chart_type == "Bar Chart":
-                    st.bar_chart(results)
-                elif chart_type == "Line Chart":
-                    st.line_chart(results)
-                elif chart_type == "Scatter Plot":
-                    st.scatter_chart(results)
-                elif chart_type == "Pie Chart" and len(results) <= 10:
-                    fig, ax = plt.subplots(figsize=(6, 3))
-                    ax.pie(results.iloc[:, 1], labels=results.iloc[:, 0], autopct='%1.1f%%')
+                
+                # סוגי הגרפים
+                chart_options = ["Bar Chart", "Line Chart", "Pie Chart"]
+                selected_chart = st.selectbox("Select chart type", chart_options, key="chart_type")
+                
+                # יצירת גרפים באמצעות matplotlib בלבד
+                try:
+                    # הכנת הנתונים
+                    x_values = results.iloc[:, 0].values
+                    y_values = results.iloc[:, 1].values
+                    
+                    # יצירת הגרף (משתמש רק ב-matplotlib ולא בפונקציות של streamlit)
+                    fig, ax = plt.subplots(figsize=(10, 5), facecolor='#181943')
+                    ax.set_facecolor('#181943')
+                    
+                    if selected_chart == "Bar Chart":
+                        # יצירת גרף עמודות
+                        bars = ax.bar(x_values, y_values, color='#00CFFF')
+                        # הוספת ערכים מעל העמודות
+                        for i, bar in enumerate(bars):
+                            ax.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.1,
+                                    f'{y_values[i]:.1f}', ha='center', color='white', fontsize=9)
+                    
+                    elif selected_chart == "Line Chart":
+                        # יצירת גרף קווי
+                        ax.plot(x_values, y_values, marker='o', linestyle='-', linewidth=2, color='#00CFFF')
+                        # הוספת נקודות ערך
+                        for i, (x, y) in enumerate(zip(x_values, y_values)):
+                            ax.text(x, y + 0.1, f'{y:.1f}', ha='center', color='white', fontsize=9)
+                    
+                    elif selected_chart == "Pie Chart" and len(results) <= 10:
+                        # יצירת גרף עוגה
+                        wedges, texts, autotexts = ax.pie(
+                            y_values, 
+                            labels=None,  # לא מציג תוויות מסביב לעוגה
+                            autopct='%1.1f%%',
+                            textprops={'color': 'white'},
+                            colors=plt.cm.Blues(np.linspace(0.4, 0.7, len(results)))
+                        )
+                        # הוספת מקרא
+                        ax.legend(wedges, x_values, title="Categories", loc="center left", 
+                                 bbox_to_anchor=(1, 0, 0.5, 1), frameon=False,
+                                 labelcolor='white')
+                    
+                    # עיצוב כללי לכל סוגי הגרפים
+                    ax.set_title(f'{selected_chart} of {results.columns[1]} by {results.columns[0]}', 
+                               color='white', fontsize=12, pad=15)
+                    ax.tick_params(axis='x', colors='white')
+                    ax.tick_params(axis='y', colors='white')
+                    ax.spines['bottom'].set_color('white')
+                    ax.spines['top'].set_color('white')
+                    ax.spines['left'].set_color('white')
+                    ax.spines['right'].set_color('white')
+                    ax.grid(axis='y', linestyle='--', alpha=0.3, color='gray')
+                    
+                    plt.tight_layout()
                     st.pyplot(fig)
+                    plt.close(fig)  # סגירת הפיגורה לשחרור זיכרון
+                    
+                except Exception as e:
+                    st.warning(f"שגיאה בהצגת הגרף: {str(e)}")
+                    
+                # תמיד מציג את הנתונים בטבלה משוכללת
+                st.write("Data for Visualization:")
+                st.dataframe(results, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 st.caption("© 2025 CashFlowIQ | Responsive Web & Mobile Dashboard | Beta Version")
