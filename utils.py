@@ -32,9 +32,13 @@ def nl_to_sql(question, table_schema, sample_data, openai_api_key=None):
     system_prompt = """
 You are a professional SQL assistant.
 The table name is 'data'. Always use 'data' as the table name in your queries.
-The 'date' column is a string in format 'YYYY-MM-DD'. Always cast it to DATE using CAST(date AS DATE) or STRPTIME(date, '%Y-%m-%d') in your queries.
+The 'date' column is a string in format 'YYYY-MM-DD'. Always cast it to DATE using CAST(date AS DATE) or STRPTIME(date, '%Y-%m-%d') before using it in date/time functions (such as STRFTIME, DATE_TRUNC, etc).
 Convert the following natural language question to a valid SQL query for DuckDB.
 Return only the SQL query, no explanations.
+
+Example:
+Question: Show me the monthly income
+SQL: SELECT STRFTIME('%Y-%m', CAST(date AS DATE)) AS month, SUM(amount) AS income FROM data WHERE category = 'Income' GROUP BY month ORDER BY month;
 """
     user_prompt = f"""Table schema:
 {table_schema}

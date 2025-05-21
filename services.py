@@ -46,11 +46,17 @@ def extract_json_from_text(text):
     return None
 
 def get_openai_key_from_file():
-    try:
-        with open("Key", "r") as f:
-            return f.read().strip()
-    except Exception:
-        return None
+    key_path = os.path.join(os.getcwd(), "venv", "Key.txt")
+    print(f"[DEBUG] Looking for API key at: {key_path}")
+    if os.path.exists(key_path):
+        print("[DEBUG] Key file found!")
+        with open(key_path, "r") as f:
+            line = f.read().strip()
+            if line.startswith("OPENAI_API_KEY="):
+                return line.split("=", 1)[1].strip()
+            return line
+    print("[DEBUG] Key file not found.")
+    return os.environ.get("OPENAI_API_KEY")
 
 def analyze_contract(text, openai_api_key=None, model="gpt-4"):
     """
