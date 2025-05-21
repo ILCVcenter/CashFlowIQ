@@ -134,6 +134,23 @@ div[data-testid="stMarkdown"] p {color: #fff !important;}
 .stDateInput label, div[data-baseweb="input"] {color: #fff !important;}
 </style>''', unsafe_allow_html=True)
 
+# --- CSS לטאבים גדולים ---
+st.markdown("""
+<style>
+    .stTabs [data-baseweb="tab"] {
+        font-size: 2.2rem !important;
+        font-weight: bold !important;
+        padding: 0.7em 2.2em !important;
+        color: #00CFFF !important;
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        border-bottom: 4px solid #00CFFF !important;
+        background: #23255d !important;
+        color: #fff !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # טעינת נתונים
 @st.cache_data
 def load_data():
@@ -145,7 +162,11 @@ data = load_data()
 # הוספת מעטפת ראשית למניעת מסגרת מיותרת
 with st.container():
     # Navigation tabs - right after the title
-    main_tab, inventory_tab, expenses_tab, contract_tab, query_tab = st.tabs(["💰 Cash Flow", "📦 Inventory", "📊 Expenses", "📄 Contract Analysis", "🔍 Natural Language Queries"])
+    main_tab, contract_tab, query_tab = st.tabs([
+        "💰 Cash Flow",
+        "📄 Contract Analysis",
+        "🔍 Natural Language Queries"
+    ])
 
     with main_tab:
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -181,7 +202,7 @@ with st.container():
         col1, col2, col3 = st.columns(3)
         with col1:
             min_date = pd.to_datetime(data_converted['date']).min().date()
-            max_date = pd.to_datetime(data_converted['date']).max().date()
+            max_date = pd.to_datetime('today').date()
             date_range = st.date_input("Date Range", [min_date, max_date], min_value=min_date, max_value=max_date)
         
         with col2:
@@ -208,6 +229,11 @@ with st.container():
         
         if type_filter:
             data_for_cashflow = data_for_cashflow[data_for_cashflow['type'].isin(type_filter)]
+        
+        # בדיקה אם יש נתונים אחרי הסינון
+        if data_for_cashflow.empty:
+            st.warning("אין נתונים בטווח התאריכים שנבחר.")
+            st.stop()
         
         # מיון לפי תאריך
         data_for_cashflow = data_for_cashflow.sort_values('date')
@@ -331,8 +357,9 @@ with st.container():
         st.subheader(f"Cash Flow Forecast ({currency_label})")
         forecast_col1, forecast_col2, forecast_col3 = st.columns(3)
         with forecast_col1:
-            forecast_min_date = pd.to_datetime(data_converted['date']).min().date()
-            forecast_max_date = pd.to_datetime(data_converted['date']).max().date()
+            forecast_min_date = pd.to_datetime('today').date()
+            forecast_max_date = forecast_min_date + pd.DateOffset(years=1)
+            forecast_max_date = forecast_max_date.date() if hasattr(forecast_max_date, 'date') else forecast_max_date
             forecast_date_range = st.date_input("Forecast Date Range", [forecast_min_date, forecast_max_date], min_value=forecast_min_date, max_value=forecast_max_date, key="forecast_date_range")
         with forecast_col2:
             forecast_category_options = data_converted['category'].unique()
@@ -377,91 +404,91 @@ with st.container():
                 forecast_display['cash_outflows'] = cash_outflows
                 forecast_display['closing_balance'] = closing_balances
                 forecast_display['forecast'] = forecast_df['forecast']
-                # טבלת תחזית
-                forecast_table = pd.DataFrame({
-                    'Date': forecast_display['date_str'],
-                    'Opening Balance': forecast_display['opening_balance'].map('${:,.2f}'.format),
-                    'Cash Inflows': forecast_display['cash_inflows'].map('${:,.2f}'.format),
-                    'Cash Outflows': forecast_display['cash_outflows'].map('${:,.2f}'.format),
-                    'Closing Balance': forecast_display['closing_balance'].map('${:,.2f}'.format),
-                    'Forecast Value': forecast_display['forecast'].map('${:,.2f}'.format)
-                })
-                
-                # הצגת טבלת תזרים התחזית והגרפים זה לצד זה
-                st.subheader("Forecast Visualization")
-                forecast_chart_data = pd.DataFrame({
-                    'Date': forecast_display['date'],
-                    'Forecast': forecast_display['forecast'],
-                    'Balance': forecast_display['closing_balance']
-                }).set_index('Date')
-                
-                # הצגת טבלה וגרפים בעמודות נפרדות
-                forecast_table_col, forecast_graph_col = st.columns([2, 1])
-                with forecast_table_col:
-                    st.dataframe(forecast_table, use_container_width=True, height=400)
-                
-                with forecast_graph_col:
-                    st.markdown('<div style="margin-bottom:16px;"></div>', unsafe_allow_html=True)
-                    chart_tab1, chart_tab2, chart_tab3 = st.tabs(["Monthly Cash Flow", "Balance Over Time", "Income vs Expenses"])
-                    with chart_tab1:
-                        # Monthly Cash Flow Forecast
-                        forecast_chart_data_month = forecast_chart_data.resample('ME').sum()
-                        fig, ax = plt.subplots(figsize=(3, 1.8), facecolor='#181943')
-                        ax.set_facecolor('#181943')
-                        forecast_chart_data_month[['Forecast']].plot(kind='bar', ax=ax, rot=0, color='#00CFFF')
-                        ax.set_xlabel('Month', fontsize=8, color='white')
-                        ax.set_ylabel('Forecast', fontsize=8, color='white')
-                        ax.set_title('Monthly Cash Flow Forecast', fontsize=10, color='white')
-                        ax.tick_params(axis='x', labelrotation=30, labelsize=6, colors='white')
-                        ax.tick_params(axis='y', labelsize=6, colors='white')
-                        ax.spines['bottom'].set_color('white')
-                        ax.spines['top'].set_color('white')
-                        ax.spines['left'].set_color('white')
-                        ax.spines['right'].set_color('white')
-                        ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
-                        
-                        # הצגת ערכים מספריים מעל העמודות
-                        for i, val in enumerate(forecast_chart_data_month['Forecast']):
-                            ax.text(i, val + (0.1 * val if val > 0 else -0.1 * val), 
-                                    f'${int(val)}', ha='center', va='bottom' if val > 0 else 'top', 
-                                    fontsize=6, color='white')
+                # בדיקה אם יש נתוני תחזית תקינים
+                if forecast_display.empty or forecast_display['date'].isnull().all() or forecast_display['forecast'].isnull().all():
+                    st.warning("אין נתוני תחזית בטווח התאריכים שנבחר.")
+                else:
+                    # טבלת תחזית
+                    forecast_table = pd.DataFrame({
+                        'Date': forecast_display['date_str'],
+                        'Opening Balance': forecast_display['opening_balance'].map('${:,.2f}'.format),
+                        'Cash Inflows': forecast_display['cash_inflows'].map('${:,.2f}'.format),
+                        'Cash Outflows': forecast_display['cash_outflows'].map('${:,.2f}'.format),
+                        'Closing Balance': forecast_display['closing_balance'].map('${:,.2f}'.format),
+                        'Notes': forecast_display.get('description', ['']*len(forecast_display))
+                    })
+                    # הצגת טבלת תזרים התחזית והגרפים זה לצד זה
+                    st.subheader("Forecast Visualization")
+                    forecast_chart_data = pd.DataFrame({
+                        'Date': forecast_display['date'],
+                        'Forecast': forecast_display['forecast'],
+                        'Balance': forecast_display['closing_balance']
+                    }).set_index('Date')
+                    forecast_table_col, forecast_graph_col = st.columns([2, 1])
+                    with forecast_table_col:
+                        st.dataframe(forecast_table, use_container_width=True, height=400)
+                    with forecast_graph_col:
+                        st.markdown('<div style="margin-bottom:16px;"></div>', unsafe_allow_html=True)
+                        chart_tab1, chart_tab2, chart_tab3 = st.tabs(["Monthly Cash Flow", "Balance Over Time", "Income vs Expenses"])
+                        with chart_tab1:
+                            # Monthly Cash Flow Forecast
+                            forecast_chart_data_month = forecast_chart_data.resample('ME').sum()
+                            fig, ax = plt.subplots(figsize=(3, 1.8), facecolor='#181943')
+                            ax.set_facecolor('#181943')
+                            forecast_chart_data_month[['Forecast']].plot(kind='bar', ax=ax, rot=0, color='#00CFFF')
+                            ax.set_xlabel('Month', fontsize=8, color='white')
+                            ax.set_ylabel('Forecast', fontsize=8, color='white')
+                            ax.set_title('Monthly Cash Flow Forecast', fontsize=10, color='white')
+                            ax.tick_params(axis='x', labelrotation=30, labelsize=6, colors='white')
+                            ax.tick_params(axis='y', labelsize=6, colors='white')
+                            ax.spines['bottom'].set_color('white')
+                            ax.spines['top'].set_color('white')
+                            ax.spines['left'].set_color('white')
+                            ax.spines['right'].set_color('white')
+                            ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
+                            
+                            # הצגת ערכים מספריים מעל העמודות
+                            for i, val in enumerate(forecast_chart_data_month['Forecast']):
+                                ax.text(i, val + (0.1 * val if val > 0 else -0.1 * val), 
+                                        f'${int(val)}', ha='center', va='bottom' if val > 0 else 'top', 
+                                        fontsize=6, color='white')
                                 
-                        st.pyplot(fig)
-                    with chart_tab2:
-                        fig, ax = plt.subplots(figsize=(3, 1.8), facecolor='#181943')
-                        ax.set_facecolor('#181943')
-                        forecast_chart_data[['Balance']].plot(ax=ax, color='#00CFFF', linewidth=2)
-                        ax.set_xlabel('Date', fontsize=8, color='white')
-                        ax.set_ylabel('Balance', fontsize=8, color='white')
-                        ax.set_title('Projected Balance Over Time', fontsize=10, color='white')
-                        ax.tick_params(axis='x', labelsize=6, colors='white')
-                        ax.tick_params(axis='y', labelsize=6, colors='white')
-                        ax.spines['bottom'].set_color('white')
-                        ax.spines['top'].set_color('white')
-                        ax.spines['left'].set_color('white')
-                        ax.spines['right'].set_color('white')
-                        ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
-                        st.pyplot(fig)
-                    with chart_tab3:
-                        # הכנסות/הוצאות לפי סוג
-                        income_types = forecast_display[forecast_display['forecast'] > 0]['forecast']
-                        expense_types = forecast_display[forecast_display['forecast'] < 0]['forecast'].abs()
-                        fig, ax = plt.subplots(figsize=(3, 1.8), facecolor='#181943')
-                        ax.set_facecolor('#181943')
-                        income_types.plot(kind='bar', color='#00CFFF', ax=ax, position=0, width=0.4, label='Income')
-                        expense_types.plot(kind='bar', color='#9966FF', ax=ax, position=1, width=0.4, label='Expense')
-                        ax.set_xlabel('Period', fontsize=8, color='white')
-                        ax.set_ylabel('Amount', fontsize=8, color='white')
-                        ax.set_title('Income vs Expenses (Forecast)', fontsize=10, color='white')
-                        ax.tick_params(axis='x', labelsize=6, colors='white')
-                        ax.tick_params(axis='y', labelsize=6, colors='white')
-                        ax.spines['bottom'].set_color('white')
-                        ax.spines['top'].set_color('white')
-                        ax.spines['left'].set_color('white')
-                        ax.spines['right'].set_color('white')
-                        ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
-                        ax.legend(fontsize=6, facecolor='#23255d', edgecolor='#23255d', labelcolor='white')
-                        st.pyplot(fig)
+                            st.pyplot(fig)
+                        with chart_tab2:
+                            fig, ax = plt.subplots(figsize=(3, 1.8), facecolor='#181943')
+                            ax.set_facecolor('#181943')
+                            forecast_chart_data[['Balance']].plot(ax=ax, color='#00CFFF', linewidth=2)
+                            ax.set_xlabel('Date', fontsize=8, color='white')
+                            ax.set_ylabel('Balance', fontsize=8, color='white')
+                            ax.set_title('Projected Balance Over Time', fontsize=10, color='white')
+                            ax.tick_params(axis='x', labelsize=6, colors='white')
+                            ax.tick_params(axis='y', labelsize=6, colors='white')
+                            ax.spines['bottom'].set_color('white')
+                            ax.spines['top'].set_color('white')
+                            ax.spines['left'].set_color('white')
+                            ax.spines['right'].set_color('white')
+                            ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
+                            st.pyplot(fig)
+                        with chart_tab3:
+                            # הכנסות/הוצאות לפי סוג
+                            income_types = forecast_display[forecast_display['forecast'] > 0]['forecast']
+                            expense_types = forecast_display[forecast_display['forecast'] < 0]['forecast'].abs()
+                            fig, ax = plt.subplots(figsize=(3, 1.8), facecolor='#181943')
+                            ax.set_facecolor('#181943')
+                            income_types.plot(kind='bar', color='#00CFFF', ax=ax, position=0, width=0.4, label='Income')
+                            expense_types.plot(kind='bar', color='#9966FF', ax=ax, position=1, width=0.4, label='Expense')
+                            ax.set_xlabel('Period', fontsize=8, color='white')
+                            ax.set_ylabel('Amount', fontsize=8, color='white')
+                            ax.set_title('Income vs Expenses (Forecast)', fontsize=10, color='white')
+                            ax.tick_params(axis='x', labelsize=6, colors='white')
+                            ax.tick_params(axis='y', labelsize=6, colors='white')
+                            ax.spines['bottom'].set_color('white')
+                            ax.spines['top'].set_color('white')
+                            ax.spines['left'].set_color('white')
+                            ax.spines['right'].set_color('white')
+                            ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
+                            ax.legend(fontsize=6, facecolor='#23255d', edgecolor='#23255d', labelcolor='white')
+                            st.pyplot(fig)
             else:
                 st.info("No forecast data available.")
         except Exception as e:
@@ -499,72 +526,6 @@ with st.container():
             file_name='cashflow_data.csv',
             mime='text/csv',
         )
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with inventory_tab:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("Inventory Levels by Component")
-        inventory = data_converted.dropna(subset=["component", "inventory_level"])
-        if not inventory.empty:
-            # עיצוב מותאם של גרף העמודות
-            fig, ax = plt.subplots(figsize=(6, 3), facecolor='#181943')
-            ax.set_facecolor('#181943')
-            # יצירת גרף עמודות
-            bars = ax.bar(inventory["component"], inventory["inventory_level"], color='#00CFFF')
-            
-            # הוספת ערכים מעל העמודות
-            for bar in bars:
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height + 5, f'{int(height)}',
-                        ha='center', va='bottom', color='white', fontsize=8)
-            
-            ax.set_xlabel('Component', fontsize=10, color='white')
-            ax.set_ylabel('Inventory Level', fontsize=10, color='white')
-            ax.set_title('Inventory Levels by Component', fontsize=12, color='white')
-            ax.tick_params(axis='x', labelrotation=30, labelsize=8, colors='white')
-            ax.tick_params(axis='y', labelsize=8, colors='white')
-            ax.spines['bottom'].set_color('white')
-            ax.spines['top'].set_color('white')
-            ax.spines['left'].set_color('white')
-            ax.spines['right'].set_color('white')
-            ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
-            st.pyplot(fig)
-        else:
-            st.info("No inventory data available.")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with expenses_tab:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("Expenses Breakdown by Type")
-        expenses = data_converted[data_converted["category"] == "Expense"]
-        if not expenses.empty:
-            exp_type = expenses.groupby("type")["amount"].sum().abs().reset_index()
-            # עיצוב מותאם של גרף העמודות
-            fig, ax = plt.subplots(figsize=(6, 3), facecolor='#181943')
-            ax.set_facecolor('#181943')
-            
-            # יצירת גרף עמודות בצבע סגול
-            bars = ax.bar(exp_type["type"], exp_type["amount"], color='#9966FF')
-            
-            # הוספת ערכים מעל העמודות
-            for bar in bars:
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height + 5, f'${int(height)}',
-                        ha='center', va='bottom', color='white', fontsize=8)
-            
-            ax.set_xlabel('Type', fontsize=10, color='white')
-            ax.set_ylabel('Amount', fontsize=10, color='white')
-            ax.set_title('Expenses by Type', fontsize=12, color='white')
-            ax.tick_params(axis='x', labelrotation=30, labelsize=8, colors='white')
-            ax.tick_params(axis='y', labelsize=8, colors='white')
-            ax.spines['bottom'].set_color('white')
-            ax.spines['top'].set_color('white')
-            ax.spines['left'].set_color('white')
-            ax.spines['right'].set_color('white')
-            ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
-            st.pyplot(fig)
-        else:
-            st.info("No expense data available.")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with contract_tab:
