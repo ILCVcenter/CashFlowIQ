@@ -9,11 +9,17 @@ import re
 import duckdb
 
 def get_openai_key():
-    try:
-        with open("Key", "r") as f:
-            return f.read().strip()
-    except:
-        return os.environ.get("OPENAI_API_KEY")
+    key_path = os.path.join(os.getcwd(), "venv", "Key.txt")
+    print(f"[DEBUG] Looking for API key at: {key_path}")
+    if os.path.exists(key_path):
+        print("[DEBUG] Key file found!")
+        with open(key_path, "r") as f:
+            line = f.read().strip()
+            if line.startswith("OPENAI_API_KEY="):
+                return line.split("=", 1)[1].strip()
+            return line
+    print("[DEBUG] Key file not found.")
+    return os.environ.get("OPENAI_API_KEY")
 
 def nl_to_sql(question, table_schema, sample_data, openai_api_key=None):
     """
@@ -23,18 +29,21 @@ def nl_to_sql(question, table_schema, sample_data, openai_api_key=None):
         openai_api_key = get_openai_key()
     if openai_api_key:
         openai.api_key = openai_api_key
-    system_prompt = """אתה עוזר SQL מקצועי. 
-    תפקידך להמיר שאלות בשפה טבעית לשאילתות SQL תקפות שמתאימות לסכמה הנתונה.
-    החזר רק את שאילתת ה-SQL ללא הסברים או דברים נוספים."""
-    user_prompt = f"""סכמת הטבלה:
-    {table_schema}
-    
-    דוגמת נתונים:
-    {sample_data}
-    
-    שאלה: {question}
-    
-    תרגם לשאילתת SQL:"""
+    system_prompt = """
+You are a professional SQL assistant.
+The table name is 'data'. Always use 'data' as the table name in your queries.
+The 'date' column is a string in format 'YYYY-MM-DD'. Always cast it to DATE using CAST(date AS DATE) or STRPTIME(date, '%Y-%m-%d') in your queries.
+Convert the following natural language question to a valid SQL query for DuckDB.
+Return only the SQL query, no explanations.
+"""
+    user_prompt = f"""Table schema:
+{table_schema}
+
+Sample data:
+{sample_data}
+
+Question: {question}
+"""
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4",
