@@ -133,23 +133,80 @@ def ask_contract_question(contract_text, question, openai_api_key=None, model="g
 
 def get_exchange_rate(base_currency, target_currency):
     """
-    שליפת שער חליפין בזמן אמת מ-exchangerate.host או API דומה.
+    שליפת שער חליפין בזמן אמת ממספר מקורות אפשריים, עם fallback למקרה של כשל.
     :param base_currency: מטבע מקור (למשל 'USD')
     :param target_currency: מטבע יעד (למשל 'ILS')
-    :return: שער חליפין עדכני (float) או None במקרה של כשל
+    :return: שער חליפין עדכני (float) או ערך קבוע במקרה של כשל
     """
-    url = f"https://api.exchangerate.host/convert?from={base_currency}&to={target_currency}"
+    # Fallback rates (fixed values for common currency pairs)
+    fallback_rates = {
+        "USD_EUR": 0.92,
+        "USD_ILS": 3.75,
+        "USD_GBP": 0.79,
+        "EUR_USD": 1.09,
+        "EUR_ILS": 4.08,
+        "EUR_GBP": 0.86,
+        "ILS_USD": 0.27,
+        "ILS_EUR": 0.24,
+        "ILS_GBP": 0.21,
+        "GBP_USD": 1.26,
+        "GBP_EUR": 1.16,
+        "GBP_ILS": 4.75
+    }
+    
+    # Return 1.0 for same currency
+    if base_currency == target_currency:
+        return 1.0
+    
+    # Try primary API - exchangerate.host
     try:
-        response = requests.get(url, timeout=5)
+        url = f"https://api.exchangerate.host/convert?from={base_currency}&to={target_currency}"
+        response = requests.get(url, timeout=3)
         if response.status_code == 200:
             data = response.json()
-            return data.get('result', None)
-        else:
-            print(f"Exchange rate API error: {response.status_code}")
-            return None
+            result = data.get('result')
+            if result:
+                print(f"Got rate from exchangerate.host: {result}")
+                return result
     except Exception as e:
-        print(f"Exchange rate fetch error: {e}")
-        return None
+        print(f"Primary API error: {e}")
+    
+    # Try alternate API - exchangeratesapi.io with no API key (limited but works)
+    try:
+        url = f"https://api.exchangeratesapi.io/latest?base={base_currency}&symbols={target_currency}"
+        response = requests.get(url, timeout=3)
+        if response.status_code == 200:
+            data = response.json()
+            rates = data.get('rates', {})
+            result = rates.get(target_currency)
+            if result:
+                print(f"Got rate from exchangeratesapi.io: {result}")
+                return result
+    except Exception as e:
+        print(f"Secondary API error: {e}")
+    
+    # Try third API - frankfurter.app
+    try:
+        url = f"https://api.frankfurter.app/latest?from={base_currency}&to={target_currency}"
+        response = requests.get(url, timeout=3)
+        if response.status_code == 200:
+            data = response.json()
+            rates = data.get('rates', {})
+            result = rates.get(target_currency)
+            if result:
+                print(f"Got rate from frankfurter.app: {result}")
+                return result
+    except Exception as e:
+        print(f"Tertiary API error: {e}")
+    
+    # If all APIs fail, use fallback rates
+    pair_key = f"{base_currency}_{target_currency}"
+    if pair_key in fallback_rates:
+        print(f"Using fallback rate for {pair_key}: {fallback_rates[pair_key]}")
+        return fallback_rates[pair_key]
+    
+    # Last fallback: returning None will show error in UI
+    return None
 
 def forecast_cashflow(df, periods=12):
     """

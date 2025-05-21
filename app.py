@@ -11,7 +11,19 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.title("💸 CashFlowIQ - Manufacturing Company Dashboard")
+# CSS styling
+st.markdown("""
+<style>
+    .main-header {color:#1E88E5; font-size:2.5rem; font-weight:bold;}
+    .sub-header {color:#0D47A1; font-size:1.5rem; font-weight:600;}
+    .info-text {color:#37474F; font-size:1rem;}
+    .warning-box {background-color:#FFF3E0; padding:10px; border-radius:5px; border-left:5px solid #FF9800;}
+    .success-box {background-color:#E8F5E9; padding:10px; border-radius:5px; border-left:5px solid #4CAF50;}
+</style>
+""", unsafe_allow_html=True)
+
+# Main Title - large and bold
+st.markdown('<p class="main-header" style="font-size:2.5rem; font-weight:bold; color:#1E88E5;">💸 CashFlowIQ - Manufacturing Company Dashboard</p>', unsafe_allow_html=True)
 
 # טעינת נתונים
 @st.cache_data
@@ -21,74 +33,92 @@ def load_data():
 
 data = load_data()
 
-# מבנה טאבים
-main_tab, inventory_tab, expenses_tab, contract_tab = st.tabs(["💰 Cash Flow", "📦 Inventory", "📊 Expenses", "📄 Contract Analysis"])
+# Navigation tabs - right after the title
+main_tab, inventory_tab, expenses_tab, contract_tab, query_tab = st.tabs(["💰 Cash Flow", "📦 Inventory", "📊 Expenses", "📄 Contract Analysis", "🔍 Natural Language Queries"])
 
 with main_tab:
+    # Currency Conversion at the top of Cash Flow tab
+    st.subheader("Currency Conversion")
+    col1, col2 = st.columns(2)
+    with col1:
+        base_currency = st.selectbox("Base Currency", ["USD", "EUR", "ILS", "GBP"], index=0, key="base_currency")
+    with col2:
+        target_currency = st.selectbox("Target Currency", ["USD", "EUR", "ILS", "GBP"], index=1, key="target_currency")
+    
+    # Get exchange rate with better error handling
+    exchange_rate = services.get_exchange_rate(base_currency, target_currency)
+    if exchange_rate:
+        st.info(f"Current Exchange Rate: 1 {base_currency} = {exchange_rate:.4f} {target_currency}")
+    else:
+        st.error("Could not fetch exchange rate. Please try again later.")
+    
+    # Apply conversion to data
+    data_converted = data.copy()
+    if exchange_rate and base_currency != target_currency:
+        data_converted['amount'] = data_converted['amount'] * exchange_rate
+        currency_label = target_currency
+    else:
+        currency_label = base_currency
+    
+    # Main content below the currency conversion
+    st.markdown("---")
     st.subheader("Company Transactions Table")
-    st.dataframe(data, use_container_width=True)
-    st.subheader("Cash Flow Over Time")
-    st.line_chart(data.groupby("date")["amount"].sum())
-    st.subheader("Income vs Expenses by Category")
-    cat_sum = data.groupby(["category"])["amount"].sum().reset_index()
-    st.bar_chart(cat_sum, x="category", y="amount")
+    st.dataframe(data_converted, use_container_width=True)
+    st.subheader(f"Cash Flow Over Time ({currency_label})")
+    st.line_chart(data_converted.groupby("date")["amount"].sum(), use_container_width=True)
+    st.subheader(f"Income vs Expenses by Category ({currency_label})")
+    cat_sum = data_converted.groupby(["category"])["amount"].sum().reset_index()
+    st.bar_chart(cat_sum, x="category", y="amount", use_container_width=True)
 
     # --- Cash Flow Forecast ---
     st.markdown("---")
-    st.subheader("Cash Flow Forecast")
-    # גרף עמודות של סכומים היסטוריים לפי חודש
-    monthly = data.copy()
+    st.subheader(f"Cash Flow Forecast ({currency_label})")
+    monthly = data_converted.copy()
     monthly['month'] = pd.to_datetime(monthly['date']).dt.to_period('M')
-    st.markdown("**Historical Monthly Cash Flow**")
-    st.bar_chart(monthly.groupby('month')['amount'].sum())
+    st.markdown(f"**Historical Monthly Cash Flow ({currency_label})**")
+    st.bar_chart(monthly.groupby('month')['amount'].sum(), use_container_width=True)
     periods = st.slider("Select forecast periods (months)", min_value=3, max_value=24, value=6)
     if st.button("Run Forecast"):
         with st.spinner("Calculating forecast..."):
             try:
-                # בדיקת טעינת מודולים מראש למניעת שגיאות
-                import sys
-                import pandas as pd
-                import numpy as np
-                from datetime import timedelta
-
-                # דיבאג נתונים
-                st.text(f"Data columns: {data.columns.tolist()}")
-                st.text(f"Data shape: {data.shape}")
-                
-                # הכנת DataFrame מתאים
-                forecast_data = data[['date', 'amount']].copy()
-                
-                # קריאה לפונקציה
+                forecast_data = data_converted[['date', 'amount']].copy()
                 forecast_df = services.forecast_cashflow(forecast_data, periods=periods)
-                
                 if not forecast_df.empty:
-                    # עיצוב וכותרת גרף
                     st.success(f"Forecast generated for {periods} months")
-                    st.line_chart(forecast_df.set_index('date')['forecast'])
+                    st.line_chart(forecast_df.set_index('date')['forecast'], use_container_width=True)
                     st.dataframe(forecast_df, use_container_width=True)
                 else:
                     st.info("No forecast data available.")
             except Exception as e:
                 st.error(f"Forecast error: {str(e)}")
-                st.text(f"Error type: {type(e).__name__}")
-                # הדפסת שגיאה מפורטת
                 import traceback
                 st.code(traceback.format_exc())
+    
+    # --- Export Data ---
+    def convert_df_to_csv(df):
+        return df.to_csv(index=False).encode('utf-8')
+    csv = convert_df_to_csv(data_converted)
+    st.download_button(
+        label="Download CSV Data",
+        data=csv,
+        file_name='cashflow_data.csv',
+        mime='text/csv',
+    )
 
 with inventory_tab:
     st.subheader("Inventory Levels by Component")
-    inventory = data.dropna(subset=["component", "inventory_level"])
+    inventory = data_converted.dropna(subset=["component", "inventory_level"])
     if not inventory.empty:
-        st.bar_chart(inventory.set_index("component")["inventory_level"])
+        st.bar_chart(inventory.set_index("component")["inventory_level"], use_container_width=True)
     else:
         st.info("No inventory data available.")
 
 with expenses_tab:
     st.subheader("Expenses Breakdown by Type")
-    expenses = data[data["category"] == "Expense"]
+    expenses = data_converted[data_converted["category"] == "Expense"]
     if not expenses.empty:
         exp_type = expenses.groupby("type")["amount"].sum().abs().reset_index()
-        st.bar_chart(exp_type, x="type", y="amount")
+        st.bar_chart(exp_type, x="type", y="amount", use_container_width=True)
     else:
         st.info("No expense data available.")
 
@@ -204,5 +234,39 @@ with contract_tab:
     except Exception as e:
         st.error(f"Error in file upload: {str(e)}")
         st.info("The file might be too large or have a problematic filename. Try a smaller file with a simple English filename.")
+
+with query_tab:
+    st.subheader("Natural Language Queries")
+    st.markdown("Ask questions about the data in natural language, and the system will translate them to SQL queries and display the results")
+    import utils
+    nl_query = st.text_input("Enter your question in natural language", placeholder="For example: How much income was there in February?")
+    if st.button("Run Query") and nl_query:
+        with st.spinner("Processing query..."):
+            table_schema = ", ".join(data.columns.tolist())
+            sample_data = data.head(3).to_string(index=False)
+            sql_query = utils.nl_to_sql(nl_query, table_schema, sample_data)
+            st.code(sql_query, language="sql")
+            try:
+                results = utils.execute_sql(data, sql_query)
+                st.success("Query Results:")
+                st.dataframe(results)
+                if not results.empty and len(results.columns) >= 2:
+                    numeric_cols = results.select_dtypes(include=['number']).columns
+                    if len(numeric_cols) > 0 and len(results) > 1:
+                        st.subheader("Visualization")
+                        chart_type = st.selectbox("Select chart type", ["Bar Chart", "Line Chart", "Scatter Plot", "Pie Chart"])
+                        if chart_type == "Bar Chart":
+                            st.bar_chart(results)
+                        elif chart_type == "Line Chart":
+                            st.line_chart(results)
+                        elif chart_type == "Scatter Plot":
+                            st.scatter_chart(results)
+                        elif chart_type == "Pie Chart" and len(results) <= 10:
+                            import matplotlib.pyplot as plt
+                            fig, ax = plt.subplots()
+                            ax.pie(results.iloc[:, 1], labels=results.iloc[:, 0], autopct='%1.1f%%')
+                            st.pyplot(fig)
+            except Exception as e:
+                st.error(f"Error running query: {str(e)}")
 
 st.caption("© 2025 CashFlowIQ | Responsive Web & Mobile Dashboard | Beta Version")
