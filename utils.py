@@ -7,18 +7,13 @@ import os
 import openai
 import re
 import duckdb
+from dotenv import load_dotenv
+
+# טען תמיד את .env מתוך תיקיית CashFlowIQ
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
 def get_openai_key():
-    key_path = os.path.join(os.getcwd(), "venv", "Key.txt")
-    print(f"[DEBUG] Looking for API key at: {key_path}")
-    if os.path.exists(key_path):
-        print("[DEBUG] Key file found!")
-        with open(key_path, "r") as f:
-            line = f.read().strip()
-            if line.startswith("OPENAI_API_KEY="):
-                return line.split("=", 1)[1].strip()
-            return line
-    print("[DEBUG] Key file not found.")
+    # טען משתני סביבה מקובץ .env
     return os.environ.get("OPENAI_API_KEY")
 
 def nl_to_sql(question, table_schema, sample_data, openai_api_key=None):

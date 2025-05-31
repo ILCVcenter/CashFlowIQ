@@ -23,6 +23,9 @@ import pandas as pd
 import numpy as np
 from datetime import timedelta
 
+# טען תמיד את .env מתוך תיקיית CashFlowIQ
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+
 # חילוץ טקסט מ-PDF
 
 def extract_text_from_pdf(pdf_file):
@@ -45,17 +48,7 @@ def extract_json_from_text(text):
         return match.group(0)
     return None
 
-def get_openai_key_from_file():
-    key_path = os.path.join(os.getcwd(), "venv", "Key.txt")
-    print(f"[DEBUG] Looking for API key at: {key_path}")
-    if os.path.exists(key_path):
-        print("[DEBUG] Key file found!")
-        with open(key_path, "r") as f:
-            line = f.read().strip()
-            if line.startswith("OPENAI_API_KEY="):
-                return line.split("=", 1)[1].strip()
-            return line
-    print("[DEBUG] Key file not found.")
+def get_openai_key():
     return os.environ.get("OPENAI_API_KEY")
 
 def analyze_contract(text, openai_api_key=None, model="gpt-4"):
@@ -67,7 +60,7 @@ def analyze_contract(text, openai_api_key=None, model="gpt-4"):
     :return: JSON כתוצאה מניתוח החוזה
     """
     if not openai_api_key:
-        openai_api_key = get_openai_key_from_file()
+        openai_api_key = get_openai_key()
     if openai_api_key:
         openai.api_key = openai_api_key
     
@@ -116,7 +109,7 @@ def ask_contract_question(contract_text, question, openai_api_key=None, model="g
     :return: תשובת GPT
     """
     if not openai_api_key:
-        openai_api_key = get_openai_key_from_file()
+        openai_api_key = get_openai_key()
     if openai_api_key:
         openai.api_key = openai_api_key
     system_prompt = (
@@ -258,5 +251,3 @@ def forecast_cashflow(df, periods=12):
     print(f"[DEBUG] result DataFrame:\n{result}")
     
     return result
-
-load_dotenv()

@@ -201,9 +201,21 @@ with st.container():
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            min_date = pd.to_datetime(data_converted['date']).min().date()
-            max_date = pd.to_datetime(data_converted['date']).max().date()
-            date_range = st.date_input("Date Range", [min_date, max_date], min_value=min_date, max_value=None)
+            # הגבלת טווח התאריכים: מ-01.01.2024 ועד היום
+            min_date = pd.to_datetime('2024-01-01').date()
+            max_date = pd.to_datetime('today').date()
+            
+            # התאריך הנבחר בברירת מחדל יהיה מתחילת 2024 ועד היום
+            default_start = min_date
+            default_end = max_date
+            
+            # ודא שאנחנו לא חורגים מטווח הנתונים הקיימים
+            data_min_date = pd.to_datetime(data_converted['date']).min().date()
+            if data_min_date > min_date:
+                min_date = data_min_date
+                default_start = data_min_date
+                
+            date_range = st.date_input("Date Range", [default_start, default_end], min_value=min_date, max_value=max_date)
         
         with col2:
             category_options = data_converted['category'].unique()
@@ -374,10 +386,19 @@ with st.container():
         st.subheader(f"Cash Flow Forecast ({currency_label})")
         forecast_col1, forecast_col2, forecast_col3 = st.columns(3)
         with forecast_col1:
+            # הגבלת טווח התאריכים: מהיום ועד 31.12.2027
             forecast_min_date = pd.to_datetime('today').date()
-            forecast_max_date = forecast_min_date + pd.DateOffset(years=3)
-            forecast_max_date = forecast_max_date.date() if hasattr(forecast_max_date, 'date') else forecast_max_date
-            forecast_date_range = st.date_input("Forecast Date Range", [forecast_min_date, forecast_max_date], min_value=forecast_min_date, max_value=None, key="forecast_date_range")
+            forecast_max_date = pd.to_datetime('2027-12-31').date()
+            
+            # התאריך הנבחר בברירת מחדל יהיה מהיום ועד חצי שנה קדימה
+            forecast_default_start = forecast_min_date
+            forecast_default_end = min(forecast_max_date, (forecast_min_date + pd.DateOffset(months=6)).date())
+            
+            forecast_date_range = st.date_input("Forecast Date Range", 
+                                                [forecast_default_start, forecast_default_end], 
+                                                min_value=forecast_min_date, 
+                                                max_value=forecast_max_date,
+                                                key="forecast_date_range")
         with forecast_col2:
             forecast_category_options = data_converted['category'].unique()
             forecast_category_filter = st.multiselect("Forecast Category Filter", forecast_category_options, default=[])
