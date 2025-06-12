@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import logging
 import services
 from ui.components import convert_df_to_csv
 from ui.styles import get_button_css
@@ -16,9 +17,15 @@ from data.data_loader import (
     save_data_to_source
 )
 
+logger = logging.getLogger(__name__)
+
 def render_cash_flow_page(data):
-    """רינדור עמוד תזרים המזומנים"""
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    """Render cash flow analysis page"""
+    # Initialize session state for scroll position
+    if 'scroll_position' not in st.session_state:
+        st.session_state.scroll_position = 0
+    
+    st.markdown('<div id="cash-flow-top" class="card">', unsafe_allow_html=True)
     
     # Currency Conversion at the top
     st.subheader("Currency Conversion")
@@ -80,24 +87,39 @@ def render_cash_flow_page(data):
     data_for_cashflow = filter_data_by_types(data_for_cashflow, type_filter)
     
     if data_for_cashflow.empty:
-        st.warning("אין נתונים בטווח התאריכים שנבחר.")
+        st.warning("No data available for the selected date range.")
         return
     
-    # הצגת תזרים מזומנים
-    display_cashflow_statement(data_for_cashflow, currency_label)
+    try:
+        # הצגת תזרים מזומנים
+        display_cashflow_statement(data_for_cashflow, currency_label)
+    except Exception as e:
+        st.error("שגיאה בהצגת תזרים המזומנים")
+        logger.error(f"Error in display_cashflow_statement: {str(e)}")
     
     # תחזית
     st.markdown("---")
-    display_cashflow_forecast(data_converted, currency_label)
+    try:
+        display_cashflow_forecast(data_converted, currency_label)
+    except Exception as e:
+        st.error("שגיאה בהצגת התחזית")
+        logger.error(f"Error in display_cashflow_forecast: {str(e)}")
     
     # Export וייבוא נתונים
     st.markdown("---")
-    handle_data_export_import(data_converted)
+    try:
+        handle_data_export_import(data_converted)
+    except Exception as e:
+        st.error("שגיאה בטיפול בייצוא/ייבוא נתונים")
+        logger.error(f"Error in handle_data_export_import: {str(e)}")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
 def display_cashflow_statement(data_for_cashflow, currency_label):
     """הצגת דוח תזרים מזומנים"""
+    # וידוא שעמודת התאריך היא datetime
+    data_for_cashflow['date'] = pd.to_datetime(data_for_cashflow['date'])
+    
     # מיון לפי תאריך
     data_for_cashflow = data_for_cashflow.sort_values('date')
     
@@ -126,13 +148,13 @@ def display_cashflow_statement(data_for_cashflow, currency_label):
     daily_cashflow['opening_balance'] = opening_balances
     daily_cashflow['closing_balance'] = closing_balances
     
-    # פורמט לתצוגה
+    # Format for display with proper thousand separators
     cashflow_display = pd.DataFrame({
         'Date': daily_cashflow['date_str'],
-        'Opening Balance': daily_cashflow['opening_balance'].map('${:,.2f}'.format),
-        'Cash Inflows': daily_cashflow['cash_inflows'].map('${:,.2f}'.format),
-        'Cash Outflows': daily_cashflow['cash_outflows'].map('${:,.2f}'.format),
-        'Closing Balance': daily_cashflow['closing_balance'].map('${:,.2f}'.format),
+        'Opening Balance': daily_cashflow['opening_balance'].map(lambda x: f'${x:,.2f}'),
+        'Cash Inflows': daily_cashflow['cash_inflows'].map(lambda x: f'${x:,.2f}'),
+        'Cash Outflows': daily_cashflow['cash_outflows'].map(lambda x: f'${x:,.2f}'),
+        'Closing Balance': daily_cashflow['closing_balance'].map(lambda x: f'${x:,.2f}'),
         'Notes': daily_cashflow['description']
     })
     
@@ -156,61 +178,122 @@ def display_cashflow_charts(data_for_cashflow, daily_cashflow):
         display_income_vs_expenses_chart(data_for_cashflow)
 
 def display_monthly_cashflow_chart(data_for_cashflow):
-    """גרף תזרים חודשי"""
-    data_for_cashflow['month'] = data_for_cashflow['date'].dt.strftime('%Y-%m')
+    """Monthly cash flow chart with improved formatting"""
+    import matplotlib.ticker as ticker
+    
+    # Ensure date column is datetime
+    data_for_cashflow = data_for_cashflow.copy()
+    data_for_cashflow['date'] = pd.to_datetime(data_for_cashflow['date'])
+    
+    # Group by month
+    data_for_cashflow['month'] = data_for_cashflow['date'].dt.to_period('M')
     monthly_inflows = data_for_cashflow[data_for_cashflow['amount'] > 0].groupby('month')['amount'].sum()
     monthly_outflows = data_for_cashflow[data_for_cashflow['amount'] < 0].groupby('month')['amount'].sum().abs()
     monthly_cashflow = pd.DataFrame({'Inflows': monthly_inflows, 'Outflows': monthly_outflows}).fillna(0)
     
     try:
-        fig, ax = plt.subplots(figsize=(2.5, 1.8), facecolor='#181943')
+        fig, ax = plt.subplots(figsize=(4, 3), facecolor='#181943')
         ax.set_facecolor('#181943')
-        monthly_cashflow.plot(kind='bar', ax=ax, rot=30, color=['#00CFFF', '#9966FF'])
         
-        if len(monthly_cashflow.index) > 10:
-            step = max(1, len(monthly_cashflow.index) // 10)
-            xlabels = ax.get_xticklabels()
-            for i, label in enumerate(xlabels):
+        # Plot bars
+        monthly_cashflow.plot(kind='bar', ax=ax, color=['#00CFFF', '#9966FF'], width=0.8)
+        
+        # Format x-axis labels
+        labels = [str(period) for period in monthly_cashflow.index]
+        if len(labels) > 8:
+            # Show fewer labels if too many
+            step = max(1, len(labels) // 8)
+            for i, label in enumerate(ax.get_xticklabels()):
                 if i % step != 0:
                     label.set_visible(False)
+                else:
+                    # Format as MMM YY
+                    period = monthly_cashflow.index[i]
+                    label.set_text(period.strftime('%b %y'))
+        else:
+            # Format all labels as MMM YY
+            formatted_labels = [period.strftime('%b %y') for period in monthly_cashflow.index]
+            ax.set_xticklabels(formatted_labels)
         
-        ax.set_xlabel('Month', fontsize=7, color='white')
-        ax.set_ylabel('Amount', fontsize=7, color='white')
-        ax.set_title('Monthly Cash Flow', fontsize=8, color='white', pad=15)
-        ax.tick_params(axis='x', labelrotation=45, labelsize=6, colors='white')
-        ax.tick_params(axis='y', labelsize=6, colors='white')
-        ax.spines['bottom'].set_color('white')
-        ax.spines['top'].set_color('white')
-        ax.spines['left'].set_color('white')
-        ax.spines['right'].set_color('white')
-        ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
-        ax.legend(fontsize=6, facecolor='#23255d', edgecolor='#23255d', labelcolor='white')
+        # Format y-axis with comma thousands separator
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, p: f'${x:,.0f}'))
+        
+        # Styling
+        ax.set_xlabel('Month', fontsize=8, color='white', fontweight='bold')
+        ax.set_ylabel('Amount', fontsize=8, color='white', fontweight='bold')
+        ax.set_title('Monthly Cash Flow', fontsize=10, color='white', pad=15, fontweight='bold')
+        ax.tick_params(axis='x', labelrotation=45, labelsize=7, colors='white')
+        ax.tick_params(axis='y', labelsize=7, colors='white')
+        
+        # Spines
+        for spine in ax.spines.values():
+            spine.set_color('white')
+            spine.set_linewidth(0.5)
+        
+        # Grid
+        ax.grid(axis='y', linestyle='--', alpha=0.3, color='white')
+        ax.set_axisbelow(True)
+        
+        # Legend
+        ax.legend(fontsize=8, facecolor='#23255d', edgecolor='white', labelcolor='white', 
+                 framealpha=0.9, loc='upper left')
         
         plt.tight_layout()
         st.pyplot(fig)
     except Exception as e:
-        st.warning(f"לא ניתן להציג את הגרף: {str(e)}")
+        st.warning(f"Unable to display chart: {str(e)}")
 
 def display_balance_over_time_chart(daily_cashflow):
-    """גרף יתרה לאורך זמן"""
+    """Balance over time chart with improved formatting"""
+    import matplotlib.ticker as ticker
+    import matplotlib.dates as mdates
+    
     balance_over_time = pd.DataFrame({
-        'Date': daily_cashflow['date'], 
+        'Date': pd.to_datetime(daily_cashflow['date']), 
         'Balance': daily_cashflow['closing_balance']
     }).set_index('Date')
     
-    fig, ax = plt.subplots(figsize=(2.5, 1.8), facecolor='#181943')
+    fig, ax = plt.subplots(figsize=(4, 3), facecolor='#181943')
     ax.set_facecolor('#181943')
-    balance_over_time.plot(ax=ax, color='#00CFFF', linewidth=2)
-    ax.set_xlabel('Date', fontsize=7, color='white')
-    ax.set_ylabel('Balance', fontsize=7, color='white')
-    ax.set_title('Balance Over Time', fontsize=8, color='white')
-    ax.tick_params(axis='x', labelsize=6, colors='white')
-    ax.tick_params(axis='y', labelsize=6, colors='white')
-    ax.spines['bottom'].set_color('white')
-    ax.spines['top'].set_color('white')
-    ax.spines['left'].set_color('white')
-    ax.spines['right'].set_color('white')
-    ax.grid(axis='y', linestyle='--', alpha=0.2, color='white')
+    
+    # Plot line
+    balance_over_time.plot(ax=ax, color='#00CFFF', linewidth=2.5, legend=False)
+    
+    # Format x-axis dates
+    if len(balance_over_time) > 30:
+        # Monthly format for many dates
+        ax.xaxis.set_major_locator(mdates.MonthLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %y'))
+    else:
+        # Daily format for fewer dates
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d %b'))
+        # Limit number of labels
+        ax.xaxis.set_major_locator(plt.MaxNLocator(8))
+    
+    # Format y-axis with comma thousands separator
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, p: f'${x:,.0f}'))
+    
+    # Styling
+    ax.set_xlabel('Date', fontsize=8, color='white', fontweight='bold')
+    ax.set_ylabel('Balance', fontsize=8, color='white', fontweight='bold')
+    ax.set_title('Balance Over Time', fontsize=10, color='white', pad=15, fontweight='bold')
+    ax.tick_params(axis='x', labelrotation=45, labelsize=7, colors='white')
+    ax.tick_params(axis='y', labelsize=7, colors='white')
+    
+    # Spines
+    for spine in ax.spines.values():
+        spine.set_color('white')
+        spine.set_linewidth(0.5)
+    
+    # Grid
+    ax.grid(axis='y', linestyle='--', alpha=0.3, color='white')
+    ax.set_axisbelow(True)
+    
+    # Add a subtle fill under the line
+    ax.fill_between(balance_over_time.index, balance_over_time['Balance'], 
+                    alpha=0.1, color='#00CFFF')
+    
+    plt.tight_layout()
     st.pyplot(fig)
 
 def display_income_vs_expenses_chart(data_for_cashflow):

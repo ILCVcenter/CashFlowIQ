@@ -22,6 +22,11 @@ import requests
 import pandas as pd
 import numpy as np
 from datetime import timedelta
+import logging
+
+# הגדרת logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # טען תמיד את .env מתוך תיקיית CashFlowIQ
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
@@ -93,7 +98,7 @@ def analyze_contract(text, openai_api_key=None, model="gpt-4"):
             return json_str
         return result
     except Exception as e:
-        print(f"Error parsing JSON: {e}")
+        logger.error(f"Error parsing JSON: {e}")
         return json.dumps({
             "error": "Failed to parse response",
             "raw_response": str(e)
@@ -165,10 +170,10 @@ def get_exchange_rate(base_currency, target_currency):
             data = response.json()
             result = data.get('result')
             if result:
-                print(f"Got rate from exchangerate.host: {result}")
+                logger.debug(f"Got rate from exchangerate.host: {result}")
                 return result
     except Exception as e:
-        print(f"Primary API error: {e}")
+        logger.debug(f"Primary API error: {e}")
     
     # Try alternate API - exchangeratesapi.io with no API key (limited but works)
     try:
@@ -179,10 +184,10 @@ def get_exchange_rate(base_currency, target_currency):
             rates = data.get('rates', {})
             result = rates.get(target_currency)
             if result:
-                print(f"Got rate from exchangeratesapi.io: {result}")
+                logger.debug(f"Got rate from exchangeratesapi.io: {result}")
                 return result
     except Exception as e:
-        print(f"Secondary API error: {e}")
+        logger.debug(f"Secondary API error: {e}")
     
     # Try third API - frankfurter.app
     try:
@@ -193,15 +198,15 @@ def get_exchange_rate(base_currency, target_currency):
             rates = data.get('rates', {})
             result = rates.get(target_currency)
             if result:
-                print(f"Got rate from frankfurter.app: {result}")
+                logger.debug(f"Got rate from frankfurter.app: {result}")
                 return result
     except Exception as e:
-        print(f"Tertiary API error: {e}")
+        logger.debug(f"Tertiary API error: {e}")
     
     # If all APIs fail, use fallback rates
     pair_key = f"{base_currency}_{target_currency}"
     if pair_key in fallback_rates:
-        print(f"Using fallback rate for {pair_key}: {fallback_rates[pair_key]}")
+        logger.debug(f"Using fallback rate for {pair_key}: {fallback_rates[pair_key]}")
         return fallback_rates[pair_key]
     
     # Last fallback: returning None will show error in UI
@@ -226,28 +231,22 @@ def forecast_cashflow(df, periods=12):
     # חישוב ממוצע נע
     avg_monthly = df.groupby(df['date'].dt.to_period('M'))['amount'].sum()
     last_6_months_avg = avg_monthly.tail(6).mean()
-    print(f"[DEBUG] avg_monthly: {avg_monthly}")
-    print(f"[DEBUG] last_6_months_avg: {last_6_months_avg}")
     
     # קו מגמה פשוט - לוקח את השינוי הממוצע לחודש
     if len(avg_monthly) > 1:
         trend = (avg_monthly.iloc[-1] - avg_monthly.iloc[0]) / (len(avg_monthly) - 1)
     else:
         trend = 0
-    print(f"[DEBUG] trend: {trend}")
     
     # חיזוי - ממוצע אחרון + מגמה
     last_date = df['date'].max()
     forecast_dates = [last_date + pd.DateOffset(months=i+1) for i in range(periods)]
     forecast_values = [last_6_months_avg + trend * (i+1) for i in range(periods)]
-    print(f"[DEBUG] forecast_dates: {forecast_dates}")
-    print(f"[DEBUG] forecast_values: {forecast_values}")
     
     # יצירת DataFrame עם התחזית
     result = pd.DataFrame({
         'date': forecast_dates,
         'forecast': forecast_values
     })
-    print(f"[DEBUG] result DataFrame:\n{result}")
     
     return result

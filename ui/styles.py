@@ -68,44 +68,121 @@ def get_tabs_css():
     """CSS לעיצוב טאבים"""
     return '''
     <style>
+    /* Hide any tab underlines or borders - multiple selectors for safety */
+    .stTabs > div > div,
+    .stTabs > div > div > div,
+    .stTabs [role="tablist"],
+    .stTabs div[data-baseweb="tab-border"] {
+        border-bottom: none !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    
+    /* Main tabs container */
     .stTabs [data-baseweb="tab-list"] {
         background: #23255d !important;
         border-radius: 12px 12px 0 0;
         padding: 0 8px;
-        border-bottom: 2px solid #23255d;
+        border-bottom: none !important;
+        border: none !important;
+        gap: 4px;
+        margin-bottom: 0px !important;
     }
+    
+    /* Remove any tab panel borders */
+    .stTabs [data-baseweb="tab-panel"] {
+        border: none !important;
+        border-top: none !important;
+        margin-top: 0px !important;
+        padding-top: 20px;
+    }
+    
+    /* Force remove any possible divider lines */
+    .stTabs::after,
+    .stTabs::before,
+    .stTabs > div::after,
+    .stTabs > div::before {
+        display: none !important;
+        content: none !important;
+        border: none !important;
+        background: none !important;
+    }
+    
+    /* Remove any hr elements that might appear */
+    .stTabs hr {
+        display: none !important;
+    }
+    
+    /* Individual tabs */
     .stTabs [data-baseweb="tab"] {
         color: #AAB2D5 !important;
         font-weight: 600;
-        font-size: 1.1rem;
-        background: transparent !important;
-        border: none !important;
-        margin-right: 8px;
-        margin-left: 8px;
-        padding: 10px 18px 8px 18px;
-        border-radius: 12px 12px 0 0;
-        transition: background 0.2s;
+        font-size: 0.9rem !important;
+        background: #181943 !important;
+        border: 1px solid #2a2d5a !important;
+        margin-right: 4px;
+        margin-left: 4px;
+        padding: 8px 16px !important;
+        border-radius: 8px 8px 0 0;
+        transition: all 0.2s ease;
+        min-width: 120px;
+        text-align: center;
     }
+    
+    /* Active tab */
     .stTabs [aria-selected="true"] {
-        color: #00CFFF !important;
+        color: #FFFFFF !important;
+        background: #00CFFF !important;
+        border: 1px solid #00CFFF !important;
         border-bottom: 3px solid #00CFFF !important;
-        background: #23255d !important;
-    }
-    .stTabs [aria-selected="false"]:hover {
-        background: #23255d55 !important;
-        color: #F5F6FA !important;
-    }
-    /* CSS לטאבים גדולים */
-    .stTabs [data-baseweb="tab"] {
-        font-size: 2.2rem !important;
         font-weight: bold !important;
-        padding: 0.7em 2.2em !important;
-        color: #00CFFF !important;
     }
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        border-bottom: 4px solid #00CFFF !important;
-        background: #23255d !important;
-        color: #fff !important;
+    
+    /* Hover state */
+    .stTabs [aria-selected="false"]:hover {
+        background: #2a2d5a !important;
+        color: #F5F6FA !important;
+        border: 1px solid #00CFFF !important;
+        cursor: pointer;
+    }
+    
+    /* Tab panel content */
+    .stTabs [data-baseweb="tab-panel"] {
+        padding-top: 20px;
+    }
+    
+    /* Nested tabs (for charts) */
+    div[data-testid="stHorizontalBlock"] .stTabs [data-baseweb="tab"] {
+        font-size: 0.75rem !important;
+        padding: 4px 8px !important;
+        min-width: 120px !important;
+        max-width: 120px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+    }
+    
+    /* Horizontal scroll for nested tabs */
+    div[data-testid="stHorizontalBlock"] .stTabs [data-baseweb="tab-list"] {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        white-space: nowrap !important;
+        scroll-behavior: smooth !important;
+        padding-bottom: 5px !important;
+    }
+    
+    /* Scrollbar styling for nested tabs */
+    div[data-testid="stHorizontalBlock"] .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar {
+        height: 4px !important;
+    }
+    
+    div[data-testid="stHorizontalBlock"] .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar-track {
+        background: #181943 !important;
+    }
+    
+    div[data-testid="stHorizontalBlock"] .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar-thumb {
+        background: #00CFFF !important;
+        border-radius: 2px !important;
     }
     </style>
     '''
@@ -160,9 +237,74 @@ def get_button_css():
     </style>
     """
 
+def get_scroll_fix_js():
+    """JavaScript to prevent auto-scroll on filter changes"""
+    return '''
+    <script>
+    let lastScrollY = 0;
+    let isFilterUpdate = false;
+    
+    // Save scroll position before any changes
+    function saveScrollPosition() {
+        lastScrollY = window.scrollY;
+    }
+    
+    // Restore scroll position
+    function restoreScrollPosition() {
+        if (isFilterUpdate && lastScrollY > 0) {
+            window.scrollTo({top: lastScrollY, behavior: 'auto'});
+            isFilterUpdate = false;
+        }
+    }
+    
+    // Monitor for filter input changes
+    function monitorFilters() {
+        const filters = document.querySelectorAll('input, select, [data-baseweb="select"]');
+        filters.forEach(filter => {
+            filter.addEventListener('change', () => {
+                saveScrollPosition();
+                isFilterUpdate = true;
+                setTimeout(restoreScrollPosition, 200);
+            });
+            filter.addEventListener('input', () => {
+                saveScrollPosition();
+                isFilterUpdate = true;
+                setTimeout(restoreScrollPosition, 200);
+            });
+        });
+    }
+    
+    // Initial setup and monitor for new elements
+    const setupObserver = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.addedNodes.length > 0) {
+                setTimeout(monitorFilters, 100);
+            }
+        });
+    });
+    
+    // Start observing when page loads
+    if (document.querySelector('.stApp')) {
+        monitorFilters();
+        setupObserver.observe(document.querySelector('.stApp'), {
+            childList: true,
+            subtree: true
+        });
+    }
+    
+    // Additional backup - prevent scroll on tab content changes
+    window.addEventListener('hashchange', function() {
+        if (lastScrollY > 0) {
+            setTimeout(() => window.scrollTo({top: lastScrollY, behavior: 'auto'}), 50);
+        }
+    });
+    </script>
+    '''
+
 def apply_all_styles(st):
-    """החלת כל הסגנונות על האפליקציה"""
+    """Apply all styles to the application"""
     st.markdown(get_main_css(), unsafe_allow_html=True)
     st.markdown(get_dark_theme_css(), unsafe_allow_html=True)
     st.markdown(get_tabs_css(), unsafe_allow_html=True)
-    st.markdown(get_tables_css(), unsafe_allow_html=True) 
+    st.markdown(get_tables_css(), unsafe_allow_html=True)
+    st.markdown(get_scroll_fix_js(), unsafe_allow_html=True) 

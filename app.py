@@ -3,12 +3,20 @@ app.py - נקודת כניסה ראשית לאפליקציית CashFlowIQ
 """
 import streamlit as st
 from PIL import Image
+import logging
+
+# הגדרת logging - מניעת הצגת הודעות בממשק
+logging.getLogger().setLevel(logging.WARNING)
+logging.getLogger('services').setLevel(logging.WARNING)
+logging.getLogger('pages.cash_flow').setLevel(logging.WARNING)
+logging.getLogger('pages.contract_analysis').setLevel(logging.WARNING)
+logging.getLogger('pages.query_chat').setLevel(logging.WARNING)
 
 # הגדרות עמוד
 st.set_page_config(
     page_title="CashFlowIQ Dashboard",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # ייבוא מודולים פנימיים
@@ -32,7 +40,7 @@ data = load_data()
 with st.container():
     main_tab, contract_tab, query_tab = st.tabs([
         "💰 Cash Flow",
-        "📄 Contract Analysis",
+        "📄 Contract Analysis", 
         "🔍 Natural Language Queries"
     ])
     
